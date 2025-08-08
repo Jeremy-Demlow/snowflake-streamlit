@@ -30,6 +30,7 @@ def main():
     """Finance Dashboard Application"""
     st.title("💰 Finance Dashboard")
     st.markdown("Financial analytics and performance tracking")
+    st.caption("🔄 Updated via CI/CD pipeline")
     
     # Sidebar
     with st.sidebar:
