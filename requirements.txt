@@ -1,14 +1,20 @@
-# Core dependencies for development and deployment scripts
-snowflake-cli>=2.0.0
+# Core dependencies for development and deployment
+snowflake-cli[all]>=3.7.0
 pyyaml>=6.0
 pandas>=2.0.0
 streamlit>=1.28.0
 
+# Enhanced connection management dependencies
+pydantic>=2.0.0
+toml>=0.10.2
+cryptography>=3.4.8
+
 # Development tools
-pytest>=7.0.0
 black>=23.0.0
 flake8>=6.0.0
+pytest>=7.0.0
 
-# Optional: For local development testing
-snowflake-snowpark-python>=1.11.0
-plotly>=5.0.0 
+# Data manipulation and visualization
+numpy>=1.24.0
+plotly>=5.0.0
+altair>=5.0.0 

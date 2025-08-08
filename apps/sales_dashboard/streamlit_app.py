@@ -4,10 +4,12 @@ import numpy as np
 import sys
 from pathlib import Path
 
-# Add shared utilities to path  
-sys.path.insert(0, str(Path(__file__).parent))
+# Simple path setup - add repo root to sys.path for shared imports
+repo_root = Path(__file__).parent.parent.parent
+sys.path.insert(0, str(repo_root))
 
-from common import snowflake_utils, ui_components, data_utils
+# Direct imports from shared.common
+from shared.common import snowflake_utils, ui_components, data_utils
 
 st.set_page_config(
     page_title="Sales Dashboard",
@@ -16,255 +18,187 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
+def get_connection():
+    """Get Snowflake connection with environment detection"""
+    try:
+        # First try: SIS environment (get_active_session)
+        return snowflake_utils.get_active_session_connection()
+    except:
+        try:
+            # Second try: Local development with Snow CLI
+            return snowflake_utils.get_connection("streamlit_env")
+        except:
+            # Third try: Default connection
+            return snowflake_utils.get_connection()
+
 def main():
     """Sales Dashboard Application."""
-    st.title("🚀 Sales Dashboard")
-    st.markdown("Real-time sales analytics and performance metrics")
+    st.title("📊 Sales Dashboard")
+    st.markdown("---")
     
-    # Sidebar filters
+    # Sidebar for controls
     with st.sidebar:
-        st.header("🔍 Filters")
+        st.header("Dashboard Controls")
         
-        # Date range filter
-        col1, col2 = st.columns(2)
-        with col1:
-            start_date = st.date_input("Start Date")
-        with col2:
-            end_date = st.date_input("End Date")
-            
+        # Connection test
+        if st.button("Test Connection"):
+            try:
+                conn = get_connection()
+                if conn.test_connection():
+                    st.success("✅ Connected to Snowflake!")
+                    st.write(f"Database: {conn.current_database}")
+                    st.write(f"Schema: {conn.current_schema}")
+                    st.write(f"Warehouse: {conn.current_warehouse}")
+                else:
+                    st.error("❌ Connection failed")
+            except Exception as e:
+                st.error(f"❌ Connection error: {e}")
+        
+        # Date range selector
+        date_range = st.date_input(
+            "Select Date Range",
+            value=(pd.Timestamp.now() - pd.Timedelta(days=30), pd.Timestamp.now()),
+            help="Select the date range for analysis"
+        )
+        
         # Region filter
-        regions = ["All", "North", "South", "East", "West"]
+        regions = ["All", "North", "South", "East", "West", "Central"]
         selected_region = st.selectbox("Region", regions)
         
-        # Sales rep filter
-        sales_reps = ["All", "John Doe", "Jane Smith", "Bob Johnson", "Alice Brown"]
-        selected_rep = st.selectbox("Sales Rep", sales_reps)
-        
-        # Connection status
-        st.divider()
-        st.subheader("📡 Connection")
-        if snowflake_utils.test_connection():
-            ui_components.create_alert("Connected", "success")
-            
-            # Get warehouse info
-            warehouse_info = snowflake_utils.get_warehouse_info()
-            st.caption(f"Warehouse: {warehouse_info.get('warehouse', 'Unknown')}")
-        else:
-            ui_components.create_alert("Disconnected", "error")
+        # Refresh data button
+        refresh_data = st.button("🔄 Refresh Data")
     
-    # Main dashboard content
-    tab1, tab2, tab3, tab4 = st.tabs(["📈 Overview", "💰 Revenue", "👥 Customers", "📋 Details"])
+    # Main content area
+    col1, col2, col3, col4 = st.columns(4)
+    
+    # Key Metrics
+    with col1:
+        ui_components.display_metric("Total Revenue", "$2.4M", "12%")
+    
+    with col2:
+        ui_components.display_metric("Orders", "1,234", "8%")
+    
+    with col3:
+        ui_components.display_metric("Customers", "856", "15%")
+    
+    with col4:
+        ui_components.display_metric("Avg. Order", "$1,943", "-3%")
+    
+    st.markdown("---")
+    
+    # Charts section
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        st.subheader("📈 Revenue Trend")
+        # Generate sample data for demonstration
+        sample_data = data_utils.generate_sample_data(30)
+        ui_components.create_line_chart(
+            sample_data, 
+            "date", 
+            "revenue",
+            title="Daily Revenue"
+        )
+    
+    with col2:
+        st.subheader("🥧 Sales by Region")
+        # Generate sample regional data
+        regional_data = pd.DataFrame({
+            'region': ['North', 'South', 'East', 'West', 'Central'],
+            'sales': [450000, 380000, 520000, 290000, 360000]
+        })
+        ui_components.create_pie_chart(
+            regional_data,
+            "region",
+            "sales", 
+            title="Regional Sales Distribution"
+        )
+    
+    st.markdown("---")
+    
+    # Data table section
+    st.subheader("📋 Recent Orders")
+    
+    # Sample orders data
+    orders_data = pd.DataFrame({
+        'Order ID': [f'ORD-{1000+i}' for i in range(10)],
+        'Customer': [f'Customer {i+1}' for i in range(10)],
+        'Product': ['Product A', 'Product B', 'Product C'] * 3 + ['Product A'],
+        'Amount': np.random.uniform(100, 5000, 10).round(2),
+        'Date': pd.date_range('2024-01-01', periods=10, freq='D'),
+        'Status': np.random.choice(['Completed', 'Processing', 'Shipped'], 10)
+    })
+    
+    ui_components.display_dataframe(
+        orders_data,
+        height=300,
+        use_container_width=True
+    )
+    
+    # Advanced analytics section
+    st.markdown("---")
+    st.subheader("🔍 Advanced Analytics")
+    
+    # Create tabs for different analysis views
+    tab1, tab2, tab3 = st.tabs(["Customer Analysis", "Product Performance", "Trends"])
     
     with tab1:
-        st.header("Key Performance Indicators")
-        
-        # Sample KPIs - in real app, this would come from Snowflake
-        kpis = {
-            "total_revenue": 1250000,
-            "monthly_growth": 0.125,
-            "total_orders": 3456,
-            "avg_order_value": 361.45,
-            "new_customers": 89,
-            "customer_retention": 0.92
-        }
-        
-        # Format KPIs nicely
-        col1, col2, col3 = st.columns(3)
-        
-        with col1:
-            st.metric(
-                "Total Revenue",
-                f"${kpis['total_revenue']:,.0f}",
-                f"{kpis['monthly_growth']:.1%}"
-            )
-            st.metric(
-                "Total Orders",
-                f"{kpis['total_orders']:,}",
-                "156"
-            )
-        
-        with col2:
-            st.metric(
-                "Avg Order Value",
-                f"${kpis['avg_order_value']:.2f}",
-                "$23.45"
-            )
-            st.metric(
-                "New Customers",
-                f"{kpis['new_customers']:,}",
-                "12"
-            )
-        
-        with col3:
-            st.metric(
-                "Customer Retention",
-                f"{kpis['customer_retention']:.1%}",
-                "2.3%"
-            )
-            
-        # Revenue trend chart
-        st.subheader("📈 Revenue Trend (Last 30 Days)")
-        
-        # Generate sample trend data
-        dates = pd.date_range(end=pd.Timestamp.now(), periods=30, freq='D')
-        revenue = np.random.normal(40000, 8000, 30).cumsum()
-        trend_data = pd.DataFrame({
-            'Date': dates,
-            'Daily Revenue': np.abs(np.diff(np.concatenate([[0], revenue])))
-        })
-        
-        ui_components.create_line_chart(
-            trend_data, 
-            'Date', 
-            'Daily Revenue', 
-            "Daily Revenue Trend"
+        st.write("Customer segmentation and lifetime value analysis")
+        # Customer data
+        customer_data = data_utils.generate_customer_data(100)
+        ui_components.create_scatter_plot(
+            customer_data,
+            "total_orders",
+            "total_spent",
+            title="Customer Value Analysis"
         )
     
     with tab2:
-        st.header("💰 Revenue Analysis")
+        st.write("Product sales performance and inventory insights")
+        # Product performance data
+        product_data = pd.DataFrame({
+            'product': [f'Product {chr(65+i)}' for i in range(8)],
+            'units_sold': np.random.randint(50, 500, 8),
+            'revenue': np.random.uniform(1000, 10000, 8).round(2),
+            'profit_margin': np.random.uniform(0.1, 0.4, 8).round(3)
+        })
         
         col1, col2 = st.columns(2)
-        
         with col1:
-            # Revenue by region
-            region_data = pd.DataFrame({
-                'Region': ['North', 'South', 'East', 'West'],
-                'Revenue': [320000, 280000, 410000, 240000]
-            })
-            
             ui_components.create_bar_chart(
-                region_data,
-                'Region',
-                'Revenue',
-                "Revenue by Region"
+                product_data,
+                "product",
+                "units_sold",
+                title="Units Sold by Product"
             )
         
         with col2:
-            # Revenue by product category
-            category_data = pd.DataFrame({
-                'Category': ['Electronics', 'Clothing', 'Home', 'Sports'],
-                'Revenue': [450000, 320000, 280000, 200000]
-            })
-            
-            ui_components.create_pie_chart(
-                category_data,
-                'Category',
-                'Revenue',
-                "Revenue by Category"
+            ui_components.create_bar_chart(
+                product_data,
+                "product", 
+                "revenue",
+                title="Revenue by Product"
             )
-        
-        # Monthly revenue table
-        st.subheader("Monthly Revenue Breakdown")
-        monthly_data = pd.DataFrame({
-            'Month': ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun'],
-            'Revenue': [180000, 195000, 210000, 225000, 240000, 255000],
-            'Orders': [720, 780, 840, 900, 960, 1020],
-            'AOV': [250, 250, 250, 250, 250, 250]
-        })
-        
-        ui_components.create_data_table(monthly_data, "Monthly Performance")
-        
-        # Download button
-        ui_components.create_download_button(
-            monthly_data,
-            "monthly_revenue.csv",
-            "📥 Download Monthly Data"
-        )
     
     with tab3:
-        st.header("👥 Customer Analytics")
+        st.write("Sales trends and forecasting")
+        # Trend analysis
+        trend_data = data_utils.generate_trend_data(90)
+        ui_components.create_area_chart(
+            trend_data,
+            "date",
+            "cumulative_sales",
+            title="Cumulative Sales Trend"
+        )
         
-        # Customer metrics
-        customer_metrics = {
-            "total_customers": 12540,
-            "new_this_month": 189,
-            "churn_rate": 0.045,
-            "lifetime_value": 1250.75
-        }
-        
-        col1, col2, col3, col4 = st.columns(4)
+        # Show trend metrics
+        col1, col2, col3 = st.columns(3)
         with col1:
-            st.metric("Total Customers", f"{customer_metrics['total_customers']:,}")
+            st.metric("90-Day Growth", "23.5%", "2.1%")
         with col2:
-            st.metric("New This Month", f"{customer_metrics['new_this_month']:,}")
+            st.metric("Monthly Average", "$185K", "5.2%")
         with col3:
-            st.metric("Churn Rate", f"{customer_metrics['churn_rate']:.1%}")
-        with col4:
-            st.metric("Avg LTV", f"${customer_metrics['lifetime_value']:.2f}")
-        
-        # Customer segmentation
-        st.subheader("Customer Segmentation")
-        
-        segment_data = pd.DataFrame({
-            'Segment': ['Premium', 'Standard', 'Basic', 'New'],
-            'Customers': [1250, 4560, 5890, 840],
-            'Avg Revenue': [850, 420, 180, 125]
-        })
-        
-        col1, col2 = st.columns(2)
-        with col1:
-            ui_components.create_bar_chart(
-                segment_data,
-                'Segment',
-                'Customers',
-                "Customers by Segment"
-            )
-        
-        with col2:
-            ui_components.create_bar_chart(
-                segment_data,
-                'Segment',
-                'Avg Revenue',
-                "Average Revenue by Segment"
-            )
-    
-    with tab4:
-        st.header("📋 Detailed Sales Data")
-        
-        # Generate sample detailed data
-        np.random.seed(42)  # For consistent sample data
-        n_records = 100
-        
-        detailed_data = pd.DataFrame({
-            'Order ID': [f"ORD-{1000 + i}" for i in range(n_records)],
-            'Date': pd.date_range(start='2024-01-01', periods=n_records, freq='D')[:n_records],
-            'Customer': [f"Customer {i+1}" for i in range(n_records)],
-            'Product': np.random.choice(['Electronics', 'Clothing', 'Home', 'Sports'], n_records),
-            'Region': np.random.choice(['North', 'South', 'East', 'West'], n_records),
-            'Sales Rep': np.random.choice(['John Doe', 'Jane Smith', 'Bob Johnson', 'Alice Brown'], n_records),
-            'Revenue': np.random.normal(350, 150, n_records).round(2),
-            'Quantity': np.random.randint(1, 10, n_records)
-        })
-        
-        # Ensure positive revenue
-        detailed_data['Revenue'] = np.abs(detailed_data['Revenue'])
-        
-        # Add filters for the detailed data
-        with st.expander("🔍 Filter Detailed Data"):
-            filter_cols = ['Product', 'Region', 'Sales Rep']
-            filters = ui_components.create_filter_sidebar(detailed_data, filter_cols, "Data Filters")
-        
-        # Apply filters if any exist
-        if 'filters' in locals():
-            filtered_data = ui_components.apply_filters(detailed_data, filters)
-        else:
-            filtered_data = detailed_data
-        
-        # Display the data
-        ui_components.create_data_table(
-            filtered_data, 
-            f"Sales Details ({len(filtered_data)} records)"
-        )
-        
-        # Show data info
-        ui_components.show_data_info(filtered_data)
-        
-        # Export functionality
-        ui_components.create_download_button(
-            filtered_data,
-            "sales_details.csv",
-            "📥 Download Filtered Data"
-        )
+            st.metric("Forecast Next Month", "$225K", "12.8%")
 
 if __name__ == "__main__":
     main() 
