@@ -8,8 +8,10 @@ from pathlib import Path
 repo_root = Path(__file__).parent.parent.parent
 sys.path.insert(0, str(repo_root))
 
-# Direct imports from shared.common
-from shared.common import snowflake_utils, ui_components, data_utils
+# Direct imports from specific modules (no __init__.py dependency)
+from shared.common.snowflake_utils import get_connection, get_active_session_connection
+from shared.common.ui_components import display_metric, create_line_chart, create_pie_chart, display_dataframe, create_scatter_plot, create_bar_chart
+from shared.common.data_utils import generate_customer_data
 
 st.set_page_config(
     page_title="Customer Analytics",
@@ -18,18 +20,18 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-def get_connection():
+def get_snowflake_connection():
     """Get Snowflake connection with environment detection"""
     try:
         # First try: SIS environment (get_active_session)
-        return snowflake_utils.get_active_session_connection()
+        return get_active_session_connection()
     except:
         try:
             # Second try: Local development with Snow CLI
-            return snowflake_utils.get_connection("streamlit_env")
+            return get_connection("streamlit_env")
         except:
             # Third try: Default connection
-            return snowflake_utils.get_connection()
+            return get_connection()
 
 def main():
     """Customer Analytics Application."""
@@ -43,7 +45,7 @@ def main():
         # Connection test
         if st.button("Test Connection"):
             try:
-                conn = get_connection()
+                conn = get_snowflake_connection()
                 if conn.test_connection():
                     st.success("✅ Connected to Snowflake!")
                     st.write(f"Database: {conn.current_database}")
@@ -72,16 +74,16 @@ def main():
     col1, col2, col3, col4 = st.columns(4)
     
     with col1:
-        ui_components.display_metric("Total Customers", "12,540", "8%")
+        display_metric("Total Customers", "12,540", "8%")
     
     with col2:
-        ui_components.display_metric("New Customers", "189", "15%")
+        display_metric("New Customers", "189", "15%")
     
     with col3:
-        ui_components.display_metric("Retention Rate", "92.3%", "2.1%")
+        display_metric("Retention Rate", "92.3%", "2.1%")
     
     with col4:
-        ui_components.display_metric("Avg. LTV", "$1,251", "5%")
+        display_metric("Avg. LTV", "$1,251", "5%")
     
     st.markdown("---")
     
@@ -101,7 +103,7 @@ def main():
                 'percentage': [10.0, 36.4, 46.9, 6.7]
             })
             
-            ui_components.create_pie_chart(
+            create_pie_chart(
                 segment_data,
                 "segment",
                 "customers",
@@ -115,7 +117,7 @@ def main():
                 'avg_revenue': [850, 420, 180, 125]
             })
             
-            ui_components.create_bar_chart(
+            create_bar_chart(
                 revenue_data,
                 "segment",
                 "avg_revenue",
@@ -126,12 +128,12 @@ def main():
         st.subheader("Customer Lifetime Value Analysis")
         
         # LTV distribution
-        ltv_data = data_utils.generate_customer_data(500)
+        ltv_data = generate_customer_data(500)
         
         col1, col2 = st.columns(2)
         
         with col1:
-            ui_components.create_scatter_plot(
+            create_scatter_plot(
                 ltv_data,
                 "total_orders",
                 "total_spent",
@@ -145,7 +147,7 @@ def main():
                 'avg_ltv': [245, 580, 1250, 2100]
             })
             
-            ui_components.create_bar_chart(
+            create_bar_chart(
                 tenure_data,
                 "tenure_months",
                 "avg_ltv",
@@ -161,7 +163,7 @@ def main():
             'retention_rate': [100, 85, 78, 72, 68, 65, 62, 60, 58, 56, 55, 54]
         })
         
-        ui_components.create_line_chart(
+        create_line_chart(
             cohort_data,
             "month",
             "retention_rate",
@@ -180,7 +182,7 @@ def main():
         col1, col2 = st.columns(2)
         
         with col1:
-            ui_components.create_bar_chart(
+            create_bar_chart(
                 churn_data,
                 "risk_level",
                 "customers",
@@ -188,7 +190,7 @@ def main():
             )
         
         with col2:
-            ui_components.display_dataframe(
+            display_dataframe(
                 churn_data,
                 height=200,
                 use_container_width=True
@@ -207,7 +209,7 @@ def main():
         col1, col2 = st.columns(2)
         
         with col1:
-            ui_components.create_pie_chart(
+            create_pie_chart(
                 acquisition_data,
                 "channel",
                 "customers",
@@ -215,7 +217,7 @@ def main():
             )
         
         with col2:
-            ui_components.create_bar_chart(
+            create_bar_chart(
                 acquisition_data,
                 "channel",
                 "cost_per_acquisition",
@@ -231,7 +233,7 @@ def main():
             'acquisition_cost': np.random.randint(8000, 15000, 12)
         })
         
-        ui_components.create_line_chart(
+        create_line_chart(
             trend_data,
             "month",
             "new_customers",

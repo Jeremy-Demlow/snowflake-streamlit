@@ -8,8 +8,10 @@ from pathlib import Path
 repo_root = Path(__file__).parent.parent.parent
 sys.path.insert(0, str(repo_root))
 
-# Direct imports from shared.common
-from shared.common import snowflake_utils, ui_components, data_utils
+# Direct imports from specific modules (no __init__.py dependency)
+from shared.common.snowflake_utils import get_connection, get_active_session_connection
+from shared.common.ui_components import display_metric, create_line_chart, create_pie_chart, display_dataframe, create_scatter_plot, create_bar_chart, create_area_chart
+from shared.common.data_utils import generate_sample_data, generate_customer_data, generate_trend_data
 
 st.set_page_config(
     page_title="Sales Dashboard",
@@ -18,18 +20,18 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-def get_connection():
+def get_snowflake_connection():
     """Get Snowflake connection with environment detection"""
     try:
         # First try: SIS environment (get_active_session)
-        return snowflake_utils.get_active_session_connection()
+        return get_active_session_connection()
     except:
         try:
             # Second try: Local development with Snow CLI
-            return snowflake_utils.get_connection("streamlit_env")
+            return get_connection("streamlit_env")
         except:
             # Third try: Default connection
-            return snowflake_utils.get_connection()
+            return get_connection()
 
 def main():
     """Sales Dashboard Application."""
@@ -43,7 +45,7 @@ def main():
         # Connection test
         if st.button("Test Connection"):
             try:
-                conn = get_connection()
+                conn = get_snowflake_connection()
                 if conn.test_connection():
                     st.success("✅ Connected to Snowflake!")
                     st.write(f"Database: {conn.current_database}")
@@ -73,16 +75,16 @@ def main():
     
     # Key Metrics
     with col1:
-        ui_components.display_metric("Total Revenue", "$2.4M", "12%")
+        display_metric("Total Revenue", "$2.4M", "12%")
     
     with col2:
-        ui_components.display_metric("Orders", "1,234", "8%")
+        display_metric("Orders", "1,234", "8%")
     
     with col3:
-        ui_components.display_metric("Customers", "856", "15%")
+        display_metric("Customers", "856", "15%")
     
     with col4:
-        ui_components.display_metric("Avg. Order", "$1,943", "-3%")
+        display_metric("Avg. Order", "$1,943", "-3%")
     
     st.markdown("---")
     
@@ -92,8 +94,8 @@ def main():
     with col1:
         st.subheader("📈 Revenue Trend")
         # Generate sample data for demonstration
-        sample_data = data_utils.generate_sample_data(30)
-        ui_components.create_line_chart(
+        sample_data = generate_sample_data(30)
+        create_line_chart(
             sample_data, 
             "date", 
             "revenue",
@@ -107,7 +109,7 @@ def main():
             'region': ['North', 'South', 'East', 'West', 'Central'],
             'sales': [450000, 380000, 520000, 290000, 360000]
         })
-        ui_components.create_pie_chart(
+        create_pie_chart(
             regional_data,
             "region",
             "sales", 
@@ -129,7 +131,7 @@ def main():
         'Status': np.random.choice(['Completed', 'Processing', 'Shipped'], 10)
     })
     
-    ui_components.display_dataframe(
+    display_dataframe(
         orders_data,
         height=300,
         use_container_width=True
@@ -145,8 +147,8 @@ def main():
     with tab1:
         st.write("Customer segmentation and lifetime value analysis")
         # Customer data
-        customer_data = data_utils.generate_customer_data(100)
-        ui_components.create_scatter_plot(
+        customer_data = generate_customer_data(100)
+        create_scatter_plot(
             customer_data,
             "total_orders",
             "total_spent",
@@ -165,7 +167,7 @@ def main():
         
         col1, col2 = st.columns(2)
         with col1:
-            ui_components.create_bar_chart(
+            create_bar_chart(
                 product_data,
                 "product",
                 "units_sold",
@@ -173,7 +175,7 @@ def main():
             )
         
         with col2:
-            ui_components.create_bar_chart(
+            create_bar_chart(
                 product_data,
                 "product", 
                 "revenue",
@@ -183,8 +185,8 @@ def main():
     with tab3:
         st.write("Sales trends and forecasting")
         # Trend analysis
-        trend_data = data_utils.generate_trend_data(90)
-        ui_components.create_area_chart(
+        trend_data = generate_trend_data(90)
+        create_area_chart(
             trend_data,
             "date",
             "cumulative_sales",

@@ -1,8 +1,8 @@
 """
-Data processing utilities for Streamlit applications.
+Data processing and utility functions for Streamlit applications.
 
-This module provides common functions for data loading, processing,
-and transformation that can be shared across applications.
+This module provides common data manipulation, formatting, and generation
+functions that can be used across different Streamlit applications.
 """
 
 import pandas as pd
@@ -10,29 +10,38 @@ import numpy as np
 import streamlit as st
 from typing import Optional, List, Dict, Any, Union
 import logging
-from .snowflake_utils import execute_query
 
 logger = logging.getLogger(__name__)
 
 
 @st.cache_data(ttl=600)  # Cache for 10 minutes
-def load_data(query: str, params: Optional[Dict[str, Any]] = None) -> pd.DataFrame:
+def load_sample_data(query: str, params: Optional[Dict[str, Any]] = None) -> pd.DataFrame:
     """
-    Load data using a SQL query with caching.
+    Load sample data - this would normally execute a query against Snowflake.
+    For demo purposes, returns sample data.
     
     Args:
-        query (str): SQL query to execute
-        params (dict, optional): Parameters for the query
+        query (str): SQL query to execute (ignored in demo)
+        params (dict, optional): Parameters for parameterized queries (ignored in demo)
         
     Returns:
-        pd.DataFrame: Loaded data
+        pd.DataFrame: Sample data
     """
-    return execute_query(query, params)
+    # In a real implementation, this would use snowflake_utils.execute_query
+    # For demo purposes, return sample data
+    logger.info("Loading sample data (demo mode)")
+    
+    return pd.DataFrame({
+        'date': pd.date_range('2024-01-01', periods=30, freq='D'),
+        'revenue': np.random.normal(10000, 2000, 30),
+        'orders': np.random.poisson(50, 30),
+        'customers': np.random.poisson(30, 30)
+    })
 
 
-def process_data(df: pd.DataFrame, operations: List[Dict[str, Any]]) -> pd.DataFrame:
+def process_data(df: pd.DataFrame, operations: List[str]) -> pd.DataFrame:
     """
-    Apply a series of operations to a DataFrame.
+    Process DataFrame with specified operations.
     
     Args:
         df (pd.DataFrame): Input DataFrame
@@ -41,260 +50,295 @@ def process_data(df: pd.DataFrame, operations: List[Dict[str, Any]]) -> pd.DataF
     Returns:
         pd.DataFrame: Processed DataFrame
     """
-    result_df = df.copy()
-    
-    for operation in operations:
-        op_type = operation.get('type')
+    try:
+        processed_df = df.copy()
         
-        try:
-            if op_type == 'filter':
-                condition = operation.get('condition')
-                if condition:
-                    result_df = result_df.query(condition)
+        for operation in operations:
+            if operation == 'remove_nulls':
+                processed_df = processed_df.dropna()
+            elif operation == 'remove_duplicates':
+                processed_df = processed_df.drop_duplicates()
+            elif operation == 'sort_by_date':
+                if 'date' in processed_df.columns:
+                    processed_df = processed_df.sort_values('date')
+            elif operation == 'add_month_column':
+                if 'date' in processed_df.columns:
+                    processed_df['month'] = pd.to_datetime(processed_df['date']).dt.month
                     
-            elif op_type == 'sort':
-                columns = operation.get('columns', [])
-                ascending = operation.get('ascending', True)
-                if columns:
-                    result_df = result_df.sort_values(columns, ascending=ascending)
-                    
-            elif op_type == 'group':
-                group_cols = operation.get('group_by', [])
-                agg_ops = operation.get('aggregations', {})
-                if group_cols and agg_ops:
-                    result_df = result_df.groupby(group_cols).agg(agg_ops).reset_index()
-                    
-            elif op_type == 'rename':
-                columns = operation.get('columns', {})
-                if columns:
-                    result_df = result_df.rename(columns=columns)
-                    
-            elif op_type == 'drop':
-                columns = operation.get('columns', [])
-                if columns:
-                    result_df = result_df.drop(columns=columns, errors='ignore')
-                    
-            elif op_type == 'fillna':
-                value = operation.get('value', 0)
-                result_df = result_df.fillna(value)
-                
-        except Exception as e:
-            logger.error(f"Error applying operation {op_type}: {e}")
-            st.warning(f"Failed to apply operation: {op_type}")
-    
-    return result_df
+        logger.info(f"Data processed with operations: {operations}")
+        return processed_df
+        
+    except Exception as e:
+        logger.error(f"Data processing failed: {e}")
+        return df
 
 
-def format_numbers(df: pd.DataFrame, number_columns: List[str], format_type: str = 'currency') -> pd.DataFrame:
+def format_currency(value: Union[int, float], currency: str = "USD") -> str:
     """
-    Format numeric columns in a DataFrame.
+    Format numeric value as currency.
     
     Args:
-        df (pd.DataFrame): Input DataFrame
-        number_columns (list): List of columns to format
-        format_type (str): Type of formatting ('currency', 'percentage', 'thousands')
+        value: Numeric value to format
+        currency: Currency code (default: USD)
         
     Returns:
-        pd.DataFrame: DataFrame with formatted columns
+        str: Formatted currency string
     """
-    result_df = df.copy()
-    
-    for col in number_columns:
-        if col in result_df.columns:
-            try:
-                if format_type == 'currency':
-                    result_df[col] = result_df[col].apply(lambda x: f"${x:,.2f}" if pd.notnull(x) else "")
-                elif format_type == 'percentage':
-                    result_df[col] = result_df[col].apply(lambda x: f"{x:.2%}" if pd.notnull(x) else "")
-                elif format_type == 'thousands':
-                    result_df[col] = result_df[col].apply(lambda x: f"{x:,.0f}" if pd.notnull(x) else "")
-            except Exception as e:
-                logger.error(f"Error formatting column {col}: {e}")
-    
-    return result_df
+    try:
+        if currency == "USD":
+            return f"${value:,.2f}"
+        elif currency == "EUR":
+            return f"€{value:,.2f}"
+        elif currency == "GBP":
+            return f"£{value:,.2f}"
+        else:
+            return f"{value:,.2f} {currency}"
+    except (ValueError, TypeError):
+        return str(value)
 
 
-def calculate_metrics(df: pd.DataFrame, metric_configs: List[Dict[str, Any]]) -> Dict[str, float]:
+def format_percentage(value: Union[int, float], decimal_places: int = 1) -> str:
     """
-    Calculate various metrics from a DataFrame.
+    Format numeric value as percentage.
     
     Args:
-        df (pd.DataFrame): Input DataFrame
-        metric_configs (list): List of metric configurations
+        value: Numeric value to format (as decimal, e.g., 0.15 for 15%)
+        decimal_places: Number of decimal places
         
     Returns:
-        dict: Calculated metrics
+        str: Formatted percentage string
     """
-    metrics = {}
-    
-    for config in metric_configs:
-        metric_name = config.get('name')
-        metric_type = config.get('type')
-        column = config.get('column')
-        
-        try:
-            if metric_type == 'sum' and column in df.columns:
-                metrics[metric_name] = df[column].sum()
-            elif metric_type == 'mean' and column in df.columns:
-                metrics[metric_name] = df[column].mean()
-            elif metric_type == 'count':
-                metrics[metric_name] = len(df)
-            elif metric_type == 'max' and column in df.columns:
-                metrics[metric_name] = df[column].max()
-            elif metric_type == 'min' and column in df.columns:
-                metrics[metric_name] = df[column].min()
-                
-        except Exception as e:
-            logger.error(f"Error calculating metric {metric_name}: {e}")
-            metrics[metric_name] = 0
-    
-    return metrics
+    try:
+        return f"{value * 100:.{decimal_places}f}%"
+    except (ValueError, TypeError):
+        return str(value)
 
 
-def pivot_data(df: pd.DataFrame, index: str, columns: str, values: str, aggfunc: str = 'sum') -> pd.DataFrame:
+def validate_data_frame(df: pd.DataFrame, required_columns: List[str]) -> Dict[str, Any]:
     """
-    Create a pivot table from the DataFrame.
+    Validate DataFrame structure and content.
     
     Args:
-        df (pd.DataFrame): Input DataFrame
-        index (str): Column to use as index
-        columns (str): Column to use as columns
-        values (str): Column to use as values
-        aggfunc (str): Aggregation function
+        df: DataFrame to validate
+        required_columns: List of required column names
+        
+    Returns:
+        dict: Validation results
+    """
+    validation_results = {
+        'is_valid': True,
+        'errors': [],
+        'warnings': [],
+        'info': {
+            'rows': len(df),
+            'columns': len(df.columns),
+            'memory_usage': df.memory_usage(deep=True).sum(),
+            'null_count': df.isnull().sum().sum()
+        }
+    }
+    
+    # Check required columns
+    missing_columns = [col for col in required_columns if col not in df.columns]
+    if missing_columns:
+        validation_results['is_valid'] = False
+        validation_results['errors'].append(f"Missing required columns: {missing_columns}")
+    
+    # Check for empty DataFrame
+    if len(df) == 0:
+        validation_results['warnings'].append("DataFrame is empty")
+    
+    # Check for high null percentage
+    null_percentage = (df.isnull().sum().sum() / (len(df) * len(df.columns))) * 100
+    if null_percentage > 20:
+        validation_results['warnings'].append(f"High null percentage: {null_percentage:.1f}%")
+    
+    return validation_results
+
+
+@st.cache_data
+def generate_sample_data(days: int = 30) -> pd.DataFrame:
+    """
+    Generate sample time series data for demo purposes.
+    
+    Args:
+        days: Number of days of data to generate
+        
+    Returns:
+        pd.DataFrame: Sample time series data
+    """
+    dates = pd.date_range(end=pd.Timestamp.now(), periods=days, freq='D')
+    
+    # Generate correlated sample data
+    base_revenue = 8000
+    trend = np.linspace(0, 2000, days)  # Upward trend
+    seasonality = 1000 * np.sin(2 * np.pi * np.arange(days) / 7)  # Weekly pattern
+    noise = np.random.normal(0, 500, days)
+    
+    revenue = base_revenue + trend + seasonality + noise
+    revenue = np.maximum(revenue, 1000)  # Ensure positive values
+    
+    return pd.DataFrame({
+        'date': dates,
+        'revenue': revenue.round(2),
+        'orders': np.random.poisson(revenue / 150),  # Orders correlated with revenue
+        'customers': np.random.poisson(revenue / 200),  # Customers correlated with revenue
+        'avg_order_value': (revenue / np.maximum(1, revenue / 150)).round(2)
+    })
+
+
+@st.cache_data
+def generate_customer_data(customers: int = 100) -> pd.DataFrame:
+    """
+    Generate sample customer data for analytics.
+    
+    Args:
+        customers: Number of customers to generate
+        
+    Returns:
+        pd.DataFrame: Sample customer data
+    """
+    np.random.seed(42)  # For reproducible results
+    
+    # Generate customer segments
+    segments = np.random.choice(['Premium', 'Standard', 'Basic'], customers, p=[0.1, 0.4, 0.5])
+    
+    # Generate data based on segments
+    data = []
+    for i in range(customers):
+        segment = segments[i]
+        
+        if segment == 'Premium':
+            orders = np.random.poisson(15)
+            avg_order = np.random.normal(300, 50)
+        elif segment == 'Standard':
+            orders = np.random.poisson(8)
+            avg_order = np.random.normal(150, 30)
+        else:  # Basic
+            orders = np.random.poisson(4)
+            avg_order = np.random.normal(75, 20)
+        
+        total_spent = orders * max(avg_order, 10)  # Ensure positive values
+        
+        data.append({
+            'customer_id': f'CUST_{i+1:04d}',
+            'segment': segment,
+            'total_orders': max(orders, 1),
+            'total_spent': round(total_spent, 2),
+            'avg_order_value': round(total_spent / max(orders, 1), 2),
+            'tenure_months': np.random.randint(1, 36),
+            'last_order_days': np.random.randint(1, 90)
+        })
+    
+    return pd.DataFrame(data)
+
+
+@st.cache_data
+def generate_trend_data(days: int = 90) -> pd.DataFrame:
+    """
+    Generate sample trend data for forecasting demos.
+    
+    Args:
+        days: Number of days of data to generate
+        
+    Returns:
+        pd.DataFrame: Sample trend data
+    """
+    dates = pd.date_range(end=pd.Timestamp.now(), periods=days, freq='D')
+    
+    # Generate trend with growth
+    base_value = 1000
+    growth_rate = 0.02  # 2% growth over the period
+    trend = base_value * (1 + growth_rate * np.arange(days) / days)
+    
+    # Add seasonality and noise
+    seasonality = 200 * np.sin(2 * np.pi * np.arange(days) / 30)  # Monthly pattern
+    noise = np.random.normal(0, 50, days)
+    
+    daily_sales = trend + seasonality + noise
+    daily_sales = np.maximum(daily_sales, 100)  # Ensure positive values
+    
+    cumulative_sales = np.cumsum(daily_sales)
+    
+    return pd.DataFrame({
+        'date': dates,
+        'daily_sales': daily_sales.round(2),
+        'cumulative_sales': cumulative_sales.round(2),
+        'moving_avg_7d': pd.Series(daily_sales).rolling(window=7, min_periods=1).mean().round(2),
+        'moving_avg_30d': pd.Series(daily_sales).rolling(window=30, min_periods=1).mean().round(2)
+    })
+
+
+def calculate_growth_rate(current_value: float, previous_value: float) -> float:
+    """
+    Calculate percentage growth rate between two values.
+    
+    Args:
+        current_value: Current period value
+        previous_value: Previous period value
+        
+    Returns:
+        float: Growth rate as decimal (e.g., 0.15 for 15% growth)
+    """
+    try:
+        if previous_value == 0:
+            return 0.0
+        return (current_value - previous_value) / previous_value
+    except (ValueError, TypeError, ZeroDivisionError):
+        return 0.0
+
+
+def create_pivot_table(df: pd.DataFrame, 
+                      index_col: str, 
+                      value_col: str, 
+                      agg_func: str = 'sum') -> pd.DataFrame:
+    """
+    Create a pivot table from DataFrame.
+    
+    Args:
+        df: Input DataFrame
+        index_col: Column to use as index
+        value_col: Column to aggregate
+        agg_func: Aggregation function ('sum', 'mean', 'count', etc.)
         
     Returns:
         pd.DataFrame: Pivot table
     """
     try:
-        return df.pivot_table(
-            index=index,
-            columns=columns,
-            values=values,
-            aggfunc=aggfunc,
+        pivot = df.pivot_table(
+            index=index_col,
+            values=value_col,
+            aggfunc=agg_func,
             fill_value=0
-        ).reset_index()
+        )
+        return pivot.reset_index()
     except Exception as e:
-        logger.error(f"Error creating pivot table: {e}")
+        logger.error(f"Pivot table creation failed: {e}")
         return pd.DataFrame()
 
 
-def detect_outliers(df: pd.DataFrame, column: str, method: str = 'iqr') -> pd.DataFrame:
+def filter_data_by_date_range(df: pd.DataFrame, 
+                             date_col: str, 
+                             start_date: str, 
+                             end_date: str) -> pd.DataFrame:
     """
-    Detect outliers in a numeric column.
+    Filter DataFrame by date range.
     
     Args:
-        df (pd.DataFrame): Input DataFrame
-        column (str): Column to analyze
-        method (str): Method to use ('iqr' or 'zscore')
+        df: Input DataFrame
+        date_col: Name of date column
+        start_date: Start date (string format)
+        end_date: End date (string format)
         
     Returns:
-        pd.DataFrame: DataFrame with outlier flag
-    """
-    result_df = df.copy()
-    
-    try:
-        if method == 'iqr':
-            Q1 = df[column].quantile(0.25)
-            Q3 = df[column].quantile(0.75)
-            IQR = Q3 - Q1
-            lower_bound = Q1 - 1.5 * IQR
-            upper_bound = Q3 + 1.5 * IQR
-            result_df['is_outlier'] = (df[column] < lower_bound) | (df[column] > upper_bound)
-            
-        elif method == 'zscore':
-            from scipy import stats
-            z_scores = np.abs(stats.zscore(df[column].dropna()))
-            result_df['is_outlier'] = False
-            result_df.loc[df[column].dropna().index, 'is_outlier'] = z_scores > 3
-            
-    except Exception as e:
-        logger.error(f"Error detecting outliers: {e}")
-        result_df['is_outlier'] = False
-    
-    return result_df
-
-
-def create_time_series(df: pd.DataFrame, date_column: str, value_column: str, 
-                      frequency: str = 'D') -> pd.DataFrame:
-    """
-    Create a time series from the DataFrame.
-    
-    Args:
-        df (pd.DataFrame): Input DataFrame
-        date_column (str): Date column name
-        value_column (str): Value column name
-        frequency (str): Frequency for resampling ('D', 'W', 'M', 'Q', 'Y')
-        
-    Returns:
-        pd.DataFrame: Time series DataFrame
+        pd.DataFrame: Filtered DataFrame
     """
     try:
-        result_df = df.copy()
-        result_df[date_column] = pd.to_datetime(result_df[date_column])
-        result_df = result_df.set_index(date_column)
+        df_copy = df.copy()
+        df_copy[date_col] = pd.to_datetime(df_copy[date_col])
         
-        # Resample based on frequency
-        if frequency in ['D', 'W', 'M', 'Q', 'Y']:
-            result_df = result_df[value_column].resample(frequency).sum().reset_index()
-        else:
-            result_df = result_df.reset_index()
-            
-        return result_df
+        mask = (df_copy[date_col] >= start_date) & (df_copy[date_col] <= end_date)
+        return df_copy[mask]
         
     except Exception as e:
-        logger.error(f"Error creating time series: {e}")
-        return pd.DataFrame()
-
-
-def validate_data(df: pd.DataFrame, validation_rules: List[Dict[str, Any]]) -> Dict[str, Any]:
-    """
-    Validate DataFrame against a set of rules.
-    
-    Args:
-        df (pd.DataFrame): DataFrame to validate
-        validation_rules (list): List of validation rules
-        
-    Returns:
-        dict: Validation results
-    """
-    results = {
-        'is_valid': True,
-        'errors': [],
-        'warnings': []
-    }
-    
-    for rule in validation_rules:
-        rule_type = rule.get('type')
-        column = rule.get('column')
-        
-        try:
-            if rule_type == 'not_null' and column in df.columns:
-                null_count = df[column].isnull().sum()
-                if null_count > 0:
-                    results['errors'].append(f"Column {column} has {null_count} null values")
-                    results['is_valid'] = False
-                    
-            elif rule_type == 'unique' and column in df.columns:
-                duplicate_count = df[column].duplicated().sum()
-                if duplicate_count > 0:
-                    results['errors'].append(f"Column {column} has {duplicate_count} duplicates")
-                    results['is_valid'] = False
-                    
-            elif rule_type == 'range' and column in df.columns:
-                min_val = rule.get('min')
-                max_val = rule.get('max')
-                if min_val is not None:
-                    below_min = (df[column] < min_val).sum()
-                    if below_min > 0:
-                        results['warnings'].append(f"Column {column} has {below_min} values below {min_val}")
-                if max_val is not None:
-                    above_max = (df[column] > max_val).sum()
-                    if above_max > 0:
-                        results['warnings'].append(f"Column {column} has {above_max} values above {max_val}")
-                        
-        except Exception as e:
-            logger.error(f"Error in validation rule {rule_type}: {e}")
-            results['errors'].append(f"Validation error: {str(e)}")
-            results['is_valid'] = False
-    
-    return results 
+        logger.error(f"Date filtering failed: {e}")
+        return df 
