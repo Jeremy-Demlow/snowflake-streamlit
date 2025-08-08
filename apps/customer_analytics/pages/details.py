@@ -2,11 +2,13 @@ import streamlit as st
 import sys
 from pathlib import Path
 
-# Add shared utilities to path
-shared_path = Path(__file__).parent.parent.parent / "shared"
-sys.path.insert(0, str(shared_path))
+# Add repo root to path for shared imports
+repo_root = Path(__file__).parent.parent.parent.parent
+sys.path.insert(0, str(repo_root))
 
-from shared.common import snowflake_utils, ui_components
+# Direct imports from specific modules (no __init__.py dependency)
+from shared.common.snowflake_utils import get_connection, get_active_session_connection
+from shared.common.ui_components import create_alert
 
 st.set_page_config(
     page_title="Customer Analytics - Details",
@@ -18,20 +20,25 @@ st.title("Details Page")
 
 st.write("This is a sample details page for the customer_analytics application.")
 
-# Example of using shared utilities
+# Test connection functionality
 if st.button("Test Connection"):
-    if snowflake_utils.test_connection():
-        ui_components.create_alert("Connection successful!", "success")
-    else:
-        ui_components.create_alert("Connection failed!", "error")
+    try:
+        # Try SIS environment first, then local
+        try:
+            conn = get_active_session_connection()
+        except:
+            conn = get_connection("streamlit_env")
+            
+        if conn.test_connection():
+            create_alert("Successfully connected to Snowflake!", "success")
+            st.write(f"**Database:** {conn.current_database}")
+            st.write(f"**Schema:** {conn.current_schema}")
+            st.write(f"**Warehouse:** {conn.current_warehouse}")
+        else:
+            create_alert("Connection test failed", "error")
+    except Exception as e:
+        create_alert(f"Connection error: {str(e)}", "error")
 
-# Example data display
-st.subheader("Sample Data")
-sample_data = {
-    "Metric": ["Revenue", "Users", "Sessions"],
-    "Value": [100000, 5000, 15000]
-}
-
-import pandas as pd
-df = pd.DataFrame(sample_data)
-ui_components.create_data_table(df, "Sample Metrics")
+# Some sample content
+st.subheader("Sample Data Analysis")
+st.write("This page could contain detailed customer analysis, drill-down views, or specific customer profiles.")

@@ -41,6 +41,18 @@ def create_sidebar(title: str = "Navigation", options: Optional[List[Dict[str, A
         return ""
 
 
+def display_metric(title: str, value: str, delta: Optional[str] = None) -> None:
+    """
+    Display a single metric with optional delta.
+    
+    Args:
+        title: Metric title
+        value: Metric value
+        delta: Optional delta value
+    """
+    st.metric(title, value, delta)
+
+
 def display_metrics(metrics: Dict[str, Union[float, int]], 
                    columns: int = 4,
                    format_func: Optional[Dict[str, str]] = None) -> None:
@@ -48,229 +60,253 @@ def display_metrics(metrics: Dict[str, Union[float, int]],
     Display metrics in a row of columns.
     
     Args:
-        metrics (dict): Dictionary of metric names and values
-        columns (int): Number of columns to display
-        format_func (dict): Dictionary of format functions for each metric
+        metrics: Dictionary of metric name to value
+        columns: Number of columns to display
+        format_func: Optional formatting functions for each metric
     """
-    if not metrics:
-        return
-        
-    metric_items = list(metrics.items())
     cols = st.columns(columns)
     
-    for i, (name, value) in enumerate(metric_items):
-        col_index = i % columns
-        with cols[col_index]:
-            if format_func and name in format_func:
-                formatted_value = format_func[name].format(value)
-            else:
-                if isinstance(value, float):
-                    formatted_value = f"{value:,.2f}"
-                elif isinstance(value, int):
-                    formatted_value = f"{value:,}"
+    for i, (key, value) in enumerate(metrics.items()):
+        with cols[i % columns]:
+            # Apply formatting if provided
+            if format_func and key in format_func:
+                if format_func[key] == 'currency':
+                    formatted_value = f"${value:,.2f}"
+                elif format_func[key] == 'percentage':
+                    formatted_value = f"{value:.1%}"
+                elif format_func[key] == 'number':
+                    formatted_value = f"{value:,.0f}"
                 else:
                     formatted_value = str(value)
-                    
-            st.metric(
-                label=name.replace('_', ' ').title(),
-                value=formatted_value
-            )
+            else:
+                formatted_value = str(value)
+            
+            st.metric(key.replace('_', ' ').title(), formatted_value)
 
 
-def create_data_table(df: pd.DataFrame, 
-                     title: str = "Data Table",
-                     height: int = 400,
+def display_dataframe(df: pd.DataFrame, 
+                     height: Optional[int] = None,
                      use_container_width: bool = True) -> None:
+    """
+    Display a DataFrame with optional styling.
+    
+    Args:
+        df: DataFrame to display
+        height: Optional height in pixels
+        use_container_width: Whether to use container width
+    """
+    st.dataframe(df, height=height, use_container_width=use_container_width)
+
+
+def create_data_table(df: pd.DataFrame,
+                     title: Optional[str] = None,
+                     show_index: bool = False,
+                     max_rows: Optional[int] = None) -> None:
     """
     Create a formatted data table with optional title.
     
     Args:
-        df (pd.DataFrame): DataFrame to display
-        title (str): Table title
-        height (int): Table height in pixels
-        use_container_width (bool): Whether to use container width
+        df: DataFrame to display
+        title: Optional table title
+        show_index: Whether to show the index
+        max_rows: Maximum number of rows to display
     """
     if title:
         st.subheader(title)
-        
-    if df.empty:
-        st.info("No data available")
-        return
-        
-    st.dataframe(
-        df,
-        height=height,
-        use_container_width=use_container_width
-    )
+    
+    display_df = df.copy()
+    if max_rows and len(display_df) > max_rows:
+        display_df = display_df.head(max_rows)
+        st.caption(f"Showing first {max_rows} of {len(df)} rows")
+    
+    st.dataframe(display_df, use_container_width=True, hide_index=not show_index)
 
 
 def create_line_chart(df: pd.DataFrame,
-                     x_column: str,
-                     y_column: str,
-                     title: str = "Line Chart",
-                     color_column: Optional[str] = None) -> None:
+                     x_col: str,
+                     y_col: str,
+                     title: Optional[str] = None,
+                     color_col: Optional[str] = None) -> None:
     """
     Create a line chart using Plotly.
     
     Args:
-        df (pd.DataFrame): DataFrame with data
-        x_column (str): Column name for x-axis
-        y_column (str): Column name for y-axis
-        title (str): Chart title
-        color_column (str, optional): Column name for color grouping
+        df: DataFrame containing the data
+        x_col: Column name for x-axis
+        y_col: Column name for y-axis
+        title: Optional chart title
+        color_col: Optional column for color grouping
     """
-    if df.empty:
-        st.info("No data available for chart")
-        return
-        
     try:
-        fig = px.line(
-            df,
-            x=x_column,
-            y=y_column,
-            color=color_column,
-            title=title
-        )
-        
+        fig = px.line(df, x=x_col, y=y_col, color=color_col, title=title)
         fig.update_layout(
-            xaxis_title=x_column.replace('_', ' ').title(),
-            yaxis_title=y_column.replace('_', ' ').title(),
-            hovermode='x unified'
+            xaxis_title=x_col.replace('_', ' ').title(),
+            yaxis_title=y_col.replace('_', ' ').title(),
+            showlegend=bool(color_col)
         )
-        
         st.plotly_chart(fig, use_container_width=True)
-        
     except Exception as e:
         logger.error(f"Error creating line chart: {e}")
-        st.error(f"Failed to create chart: {str(e)}")
+        st.error(f"Failed to create line chart: {str(e)}")
 
 
 def create_bar_chart(df: pd.DataFrame,
-                    x_column: str,
-                    y_column: str,
-                    title: str = "Bar Chart",
+                    x_col: str,
+                    y_col: str,
+                    title: Optional[str] = None,
+                    color_col: Optional[str] = None,
                     orientation: str = 'v') -> None:
     """
     Create a bar chart using Plotly.
     
     Args:
-        df (pd.DataFrame): DataFrame with data
-        x_column (str): Column name for x-axis
-        y_column (str): Column name for y-axis
-        title (str): Chart title
-        orientation (str): Chart orientation ('v' for vertical, 'h' for horizontal)
+        df: DataFrame containing the data
+        x_col: Column name for x-axis
+        y_col: Column name for y-axis
+        title: Optional chart title
+        color_col: Optional column for color grouping
+        orientation: Chart orientation ('v' for vertical, 'h' for horizontal)
     """
-    if df.empty:
-        st.info("No data available for chart")
-        return
-        
     try:
-        fig = px.bar(
-            df,
-            x=x_column if orientation == 'v' else y_column,
-            y=y_column if orientation == 'v' else x_column,
-            title=title,
-            orientation=orientation
-        )
+        if orientation == 'h':
+            fig = px.bar(df, x=y_col, y=x_col, color=color_col, title=title, orientation='h')
+        else:
+            fig = px.bar(df, x=x_col, y=y_col, color=color_col, title=title)
         
         fig.update_layout(
-            xaxis_title=x_column.replace('_', ' ').title(),
-            yaxis_title=y_column.replace('_', ' ').title()
+            xaxis_title=x_col.replace('_', ' ').title(),
+            yaxis_title=y_col.replace('_', ' ').title(),
+            showlegend=bool(color_col)
         )
-        
         st.plotly_chart(fig, use_container_width=True)
-        
     except Exception as e:
         logger.error(f"Error creating bar chart: {e}")
-        st.error(f"Failed to create chart: {str(e)}")
+        st.error(f"Failed to create bar chart: {str(e)}")
 
 
 def create_pie_chart(df: pd.DataFrame,
-                    labels_column: str,
-                    values_column: str,
-                    title: str = "Pie Chart") -> None:
+                    names_col: str,
+                    values_col: str,
+                    title: Optional[str] = None) -> None:
     """
     Create a pie chart using Plotly.
     
     Args:
-        df (pd.DataFrame): DataFrame with data
-        labels_column (str): Column name for labels
-        values_column (str): Column name for values
-        title (str): Chart title
+        df: DataFrame containing the data
+        names_col: Column name for pie slice labels
+        values_col: Column name for pie slice values
+        title: Optional chart title
     """
-    if df.empty:
-        st.info("No data available for chart")
-        return
-        
     try:
-        fig = px.pie(
-            df,
-            names=labels_column,
-            values=values_column,
-            title=title
-        )
-        
+        fig = px.pie(df, names=names_col, values=values_col, title=title)
+        fig.update_traces(textposition='inside', textinfo='percent+label')
         st.plotly_chart(fig, use_container_width=True)
-        
     except Exception as e:
         logger.error(f"Error creating pie chart: {e}")
-        st.error(f"Failed to create chart: {str(e)}")
+        st.error(f"Failed to create pie chart: {str(e)}")
 
 
-def create_filter_sidebar(df: pd.DataFrame, 
-                         filter_columns: List[str],
-                         title: str = "Filters") -> Dict[str, Any]:
+def create_scatter_plot(df: pd.DataFrame,
+                       x_col: str,
+                       y_col: str,
+                       title: Optional[str] = None,
+                       color_col: Optional[str] = None,
+                       size_col: Optional[str] = None) -> None:
     """
-    Create filters in the sidebar for DataFrame columns.
+    Create a scatter plot using Plotly.
     
     Args:
-        df (pd.DataFrame): DataFrame to filter
-        filter_columns (list): List of column names to create filters for
-        title (str): Filter section title
+        df: DataFrame containing the data
+        x_col: Column name for x-axis
+        y_col: Column name for y-axis
+        title: Optional chart title
+        color_col: Optional column for color grouping
+        size_col: Optional column for point sizes
+    """
+    try:
+        fig = px.scatter(df, x=x_col, y=y_col, color=color_col, size=size_col, title=title)
+        fig.update_layout(
+            xaxis_title=x_col.replace('_', ' ').title(),
+            yaxis_title=y_col.replace('_', ' ').title(),
+            showlegend=bool(color_col)
+        )
+        st.plotly_chart(fig, use_container_width=True)
+    except Exception as e:
+        logger.error(f"Error creating scatter plot: {e}")
+        st.error(f"Failed to create scatter plot: {str(e)}")
+
+
+def create_area_chart(df: pd.DataFrame,
+                     x_col: str,
+                     y_col: str,
+                     title: Optional[str] = None,
+                     color_col: Optional[str] = None) -> None:
+    """
+    Create an area chart using Plotly.
+    
+    Args:
+        df: DataFrame containing the data
+        x_col: Column name for x-axis
+        y_col: Column name for y-axis
+        title: Optional chart title
+        color_col: Optional column for color grouping
+    """
+    try:
+        fig = px.area(df, x=x_col, y=y_col, color=color_col, title=title)
+        fig.update_layout(
+            xaxis_title=x_col.replace('_', ' ').title(),
+            yaxis_title=y_col.replace('_', ' ').title(),
+            showlegend=bool(color_col)
+        )
+        st.plotly_chart(fig, use_container_width=True)
+    except Exception as e:
+        logger.error(f"Error creating area chart: {e}")
+        st.error(f"Failed to create area chart: {str(e)}")
+
+
+def create_filter_sidebar(df: pd.DataFrame,
+                         filter_columns: List[str],
+                         sidebar_title: str = "Filters") -> Dict[str, Any]:
+    """
+    Create filter controls in the sidebar.
+    
+    Args:
+        df: DataFrame to create filters for
+        filter_columns: List of column names to create filters for
+        sidebar_title: Title for the filter section
         
     Returns:
-        dict: Dictionary of selected filter values
+        dict: Dictionary of filter values
     """
     filters = {}
     
     with st.sidebar:
-        st.subheader(title)
+        st.subheader(sidebar_title)
         
-        for column in filter_columns:
-            if column in df.columns:
-                if df[column].dtype in ['object', 'string']:
-                    # Categorical filter
-                    unique_values = sorted(df[column].dropna().unique().tolist())
+        for col in filter_columns:
+            if col in df.columns:
+                unique_values = df[col].unique()
+                
+                if df[col].dtype in ['object', 'string']:
+                    # Create multiselect for categorical data
                     selected = st.multiselect(
-                        f"Select {column.replace('_', ' ').title()}:",
+                        f"Select {col.replace('_', ' ').title()}:",
                         options=unique_values,
                         default=unique_values
                     )
-                    filters[column] = selected
+                    filters[col] = selected
                     
-                elif pd.api.types.is_numeric_dtype(df[column]):
-                    # Numeric range filter
-                    min_val = float(df[column].min())
-                    max_val = float(df[column].max())
+                elif df[col].dtype in ['int64', 'float64']:
+                    # Create slider for numeric data
+                    min_val = float(df[col].min())
+                    max_val = float(df[col].max())
                     selected_range = st.slider(
-                        f"{column.replace('_', ' ').title()} Range:",
+                        f"{col.replace('_', ' ').title()} Range:",
                         min_value=min_val,
                         max_value=max_val,
                         value=(min_val, max_val)
                     )
-                    filters[column] = selected_range
-                    
-                elif pd.api.types.is_datetime64_any_dtype(df[column]):
-                    # Date range filter
-                    min_date = df[column].min().date()
-                    max_date = df[column].max().date()
-                    selected_dates = st.date_input(
-                        f"{column.replace('_', ' ').title()} Range:",
-                        value=(min_date, max_date),
-                        min_value=min_date,
-                        max_value=max_date
-                    )
-                    filters[column] = selected_dates
+                    filters[col] = selected_range
     
     return filters
 
@@ -280,75 +316,64 @@ def apply_filters(df: pd.DataFrame, filters: Dict[str, Any]) -> pd.DataFrame:
     Apply filters to a DataFrame.
     
     Args:
-        df (pd.DataFrame): DataFrame to filter
-        filters (dict): Dictionary of filter values
+        df: DataFrame to filter
+        filters: Dictionary of filter values
         
     Returns:
         pd.DataFrame: Filtered DataFrame
     """
-    result_df = df.copy()
+    filtered_df = df.copy()
     
-    for column, filter_value in filters.items():
-        if column in result_df.columns and filter_value:
-            try:
-                if isinstance(filter_value, list) and len(filter_value) > 0:
-                    # Categorical filter
-                    result_df = result_df[result_df[column].isin(filter_value)]
-                    
-                elif isinstance(filter_value, tuple) and len(filter_value) == 2:
-                    # Range filter
-                    min_val, max_val = filter_value
-                    result_df = result_df[
-                        (result_df[column] >= min_val) & 
-                        (result_df[column] <= max_val)
-                    ]
-                    
-            except Exception as e:
-                logger.error(f"Error applying filter for {column}: {e}")
-                st.warning(f"Failed to apply filter for {column}")
+    for col, filter_value in filters.items():
+        if col in filtered_df.columns:
+            if isinstance(filter_value, list) and filter_value:
+                # Handle multiselect filters
+                filtered_df = filtered_df[filtered_df[col].isin(filter_value)]
+            elif isinstance(filter_value, tuple) and len(filter_value) == 2:
+                # Handle range filters
+                min_val, max_val = filter_value
+                filtered_df = filtered_df[
+                    (filtered_df[col] >= min_val) & 
+                    (filtered_df[col] <= max_val)
+                ]
     
-    return result_df
+    return filtered_df
 
 
-def create_download_button(df: pd.DataFrame, 
-                          filename: str = "data.csv",
-                          button_text: str = "Download CSV") -> None:
+def create_download_button(df: pd.DataFrame,
+                          filename: str,
+                          button_text: str = "Download CSV",
+                          mime_type: str = "text/csv") -> None:
     """
     Create a download button for DataFrame data.
     
     Args:
-        df (pd.DataFrame): DataFrame to download
-        filename (str): Filename for download
-        button_text (str): Button text
+        df: DataFrame to download
+        filename: Filename for the download
+        button_text: Text to display on the button
+        mime_type: MIME type for the download
     """
-    if df.empty:
-        return
-        
     try:
-        csv = df.to_csv(index=False)
+        csv_data = df.to_csv(index=False)
         st.download_button(
             label=button_text,
-            data=csv,
+            data=csv_data,
             file_name=filename,
-            mime='text/csv'
+            mime=mime_type
         )
     except Exception as e:
         logger.error(f"Error creating download button: {e}")
-        st.error("Failed to create download button")
+        st.error(f"Failed to create download button: {str(e)}")
 
 
 def show_data_info(df: pd.DataFrame) -> None:
     """
-    Display information about the DataFrame.
+    Show information about a DataFrame.
     
     Args:
-        df (pd.DataFrame): DataFrame to analyze
+        df: DataFrame to analyze
     """
-    if df.empty:
-        st.info("No data to display")
-        return
-        
-    with st.expander("Data Information"):
+    with st.expander("📊 Data Information"):
         col1, col2, col3 = st.columns(3)
         
         with col1:
@@ -356,15 +381,15 @@ def show_data_info(df: pd.DataFrame) -> None:
         with col2:
             st.metric("Columns", len(df.columns))
         with col3:
-            st.metric("Memory Usage", f"{df.memory_usage(deep=True).sum() / 1024:.1f} KB")
-            
+            st.metric("Memory Usage", f"{df.memory_usage(deep=True).sum() / 1024**2:.2f} MB")
+        
+        # Show column info
         st.subheader("Column Information")
         info_df = pd.DataFrame({
             'Column': df.columns,
-            'Type': df.dtypes.astype(str),
-            'Non-Null Count': df.count(),
+            'Data Type': df.dtypes.astype(str),
             'Null Count': df.isnull().sum(),
-            'Unique Values': df.nunique()
+            'Null %': (df.isnull().sum() / len(df) * 100).round(2)
         })
         st.dataframe(info_df, use_container_width=True)
 
@@ -374,16 +399,14 @@ def create_alert(message: str, alert_type: str = "info") -> None:
     Create a styled alert message.
     
     Args:
-        message (str): Alert message
-        alert_type (str): Type of alert ('info', 'success', 'warning', 'error')
+        message: Alert message
+        alert_type: Type of alert ('info', 'success', 'warning', 'error')
     """
-    if alert_type == "info":
-        st.info(message)
-    elif alert_type == "success":
+    if alert_type == "success":
         st.success(message)
     elif alert_type == "warning":
         st.warning(message)
     elif alert_type == "error":
         st.error(message)
     else:
-        st.write(message) 
+        st.info(message) 
