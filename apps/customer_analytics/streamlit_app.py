@@ -1,17 +1,15 @@
+"""
+Customer Analytics - Self-contained Streamlit app with local utilities
+"""
 import streamlit as st
 import pandas as pd
 import numpy as np
-import sys
-from pathlib import Path
+from snowflake.snowpark.context import get_active_session
 
-# Simple path setup - add repo root to sys.path for shared imports
-repo_root = Path(__file__).parent.parent.parent
-sys.path.insert(0, str(repo_root))
-
-# Direct imports from specific modules (no __init__.py dependency)
-from shared.common.snowflake_utils import get_connection, get_active_session_connection
-from shared.common.ui_components import display_metric, create_line_chart, create_pie_chart, display_dataframe, create_scatter_plot, create_bar_chart
-from shared.common.data_utils import generate_customer_data
+# Simple local imports - no path manipulation needed
+from common.snowflake_utils import get_active_session_connection
+from common.ui_components import display_metric, create_line_chart, create_pie_chart, display_dataframe, create_scatter_plot, create_bar_chart
+from common.data_utils import generate_customer_data
 
 st.set_page_config(
     page_title="Customer Analytics",
@@ -21,24 +19,19 @@ st.set_page_config(
 )
 
 def get_snowflake_connection():
-    """Get Snowflake connection with environment detection"""
+    """Get Snowflake connection - works in SIS"""
     try:
-        # First try: SIS environment (get_active_session)
         return get_active_session_connection()
     except:
-        try:
-            # Second try: Local development with Snow CLI
-            return get_connection("streamlit_env")
-        except:
-            # Third try: Default connection
-            return get_connection()
+        # Fallback for local development would go here
+        return get_active_session()
 
 def main():
-    """Customer Analytics Application."""
+    """Customer Analytics Application"""
     st.title("👥 Customer Analytics")
-    st.markdown("---")
+    st.markdown("Customer segmentation and lifetime value analysis")
     
-    # Sidebar for controls
+    # Sidebar
     with st.sidebar:
         st.header("Analytics Controls")
         
@@ -46,44 +39,44 @@ def main():
         if st.button("Test Connection"):
             try:
                 conn = get_snowflake_connection()
-                if conn.test_connection():
+                if hasattr(conn, 'test_connection') and conn.test_connection():
                     st.success("✅ Connected to Snowflake!")
-                    st.write(f"Database: {conn.current_database}")
-                    st.write(f"Schema: {conn.current_schema}")
-                    st.write(f"Warehouse: {conn.current_warehouse}")
+                    st.write(f"**Database:** {conn.current_database}")
+                    st.write(f"**Schema:** {conn.current_schema}")
+                    st.write(f"**Warehouse:** {conn.current_warehouse}")
                 else:
-                    st.error("❌ Connection failed")
+                    # Direct session test
+                    session = get_active_session()
+                    st.success("✅ Connected to Snowflake!")
+                    st.write(f"**Database:** {session.get_current_database()}")
+                    st.write(f"**Schema:** {session.get_current_schema()}")
+                    st.write(f"**Warehouse:** {session.get_current_warehouse()}")
             except Exception as e:
                 st.error(f"❌ Connection error: {e}")
         
-        # Date range selector
+        # Filters
         date_range = st.date_input(
             "Analysis Period",
-            value=(pd.Timestamp.now() - pd.Timedelta(days=90), pd.Timestamp.now()),
-            help="Select the period for customer analysis"
+            value=(pd.Timestamp.now() - pd.Timedelta(days=90), pd.Timestamp.now())
         )
         
-        # Customer segment filter
         segments = ["All", "Premium", "Standard", "Basic", "New"]
         selected_segment = st.selectbox("Customer Segment", segments)
         
-        # Refresh data button
-        refresh_data = st.button("🔄 Refresh Analysis")
+        if st.button("🔄 Refresh Analysis"):
+            st.rerun()
     
-    # Key customer metrics
+    # Key customer metrics using nice utility functions
     col1, col2, col3, col4 = st.columns(4)
     
     with col1:
         display_metric("Total Customers", "12,540", "8%")
-    
     with col2:
         display_metric("New Customers", "189", "15%")
-    
     with col3:
         display_metric("Retention Rate", "92.3%", "2.1%")
-    
     with col4:
-        display_metric("Avg. LTV", "$1,251", "5%")
+        display_metric("Avg LTV", "$1,251", "5%")
     
     st.markdown("---")
     
@@ -93,66 +86,37 @@ def main():
     with tab1:
         st.subheader("Customer Segmentation Analysis")
         
-        # Segment distribution
         col1, col2 = st.columns(2)
         
         with col1:
             segment_data = pd.DataFrame({
                 'segment': ['Premium', 'Standard', 'Basic', 'New'],
-                'customers': [1250, 4560, 5890, 840],
-                'percentage': [10.0, 36.4, 46.9, 6.7]
+                'customers': [1250, 4560, 5890, 840]
             })
-            
-            create_pie_chart(
-                segment_data,
-                "segment",
-                "customers",
-                title="Customer Distribution by Segment"
-            )
+            create_pie_chart(segment_data, "segment", "customers", "Customer Distribution")
         
         with col2:
-            # Revenue by segment
             revenue_data = pd.DataFrame({
                 'segment': ['Premium', 'Standard', 'Basic', 'New'],
                 'avg_revenue': [850, 420, 180, 125]
             })
-            
-            create_bar_chart(
-                revenue_data,
-                "segment",
-                "avg_revenue",
-                title="Average Revenue by Segment"
-            )
+            create_bar_chart(revenue_data, "segment", "avg_revenue", "Average Revenue by Segment")
     
     with tab2:
         st.subheader("Customer Lifetime Value Analysis")
         
-        # LTV distribution
-        ltv_data = generate_customer_data(500)
-        
         col1, col2 = st.columns(2)
         
         with col1:
-            create_scatter_plot(
-                ltv_data,
-                "total_orders",
-                "total_spent",
-                title="Customer Value Distribution"
-            )
+            ltv_data = generate_customer_data(500)
+            create_scatter_plot(ltv_data, "total_orders", "total_spent", "Customer Value Distribution")
         
         with col2:
-            # LTV by tenure
             tenure_data = pd.DataFrame({
                 'tenure_months': ['0-6', '6-12', '12-24', '24+'],
                 'avg_ltv': [245, 580, 1250, 2100]
             })
-            
-            create_bar_chart(
-                tenure_data,
-                "tenure_months",
-                "avg_ltv",
-                title="LTV by Customer Tenure"
-            )
+            create_bar_chart(tenure_data, "tenure_months", "avg_ltv", "LTV by Customer Tenure")
     
     with tab3:
         st.subheader("Customer Retention Analysis")
@@ -162,13 +126,7 @@ def main():
             'month': pd.date_range('2024-01-01', periods=12, freq='M'),
             'retention_rate': [100, 85, 78, 72, 68, 65, 62, 60, 58, 56, 55, 54]
         })
-        
-        create_line_chart(
-            cohort_data,
-            "month",
-            "retention_rate",
-            title="12-Month Retention Cohort"
-        )
+        create_line_chart(cohort_data, "month", "retention_rate", "12-Month Retention Cohort")
         
         # Churn risk analysis
         st.subheader("Churn Risk Analysis")
@@ -182,19 +140,10 @@ def main():
         col1, col2 = st.columns(2)
         
         with col1:
-            create_bar_chart(
-                churn_data,
-                "risk_level",
-                "customers",
-                title="Customers by Churn Risk"
-            )
+            create_bar_chart(churn_data, "risk_level", "customers", "Customers by Churn Risk")
         
         with col2:
-            display_dataframe(
-                churn_data,
-                height=200,
-                use_container_width=True
-            )
+            display_dataframe(churn_data, height=200, use_container_width=True)
     
     with tab4:
         st.subheader("Customer Acquisition Analysis")
@@ -209,36 +158,19 @@ def main():
         col1, col2 = st.columns(2)
         
         with col1:
-            create_pie_chart(
-                acquisition_data,
-                "channel",
-                "customers",
-                title="Customer Acquisition by Channel"
-            )
+            create_pie_chart(acquisition_data, "channel", "customers", "Customer Acquisition by Channel")
         
         with col2:
-            create_bar_chart(
-                acquisition_data,
-                "channel",
-                "cost_per_acquisition",
-                title="Cost per Acquisition by Channel"
-            )
+            create_bar_chart(acquisition_data, "channel", "cost_per_acquisition", "Cost per Acquisition")
         
         # Monthly acquisition trend
         st.subheader("Acquisition Trend")
         
         trend_data = pd.DataFrame({
             'month': pd.date_range('2024-01-01', periods=12, freq='M'),
-            'new_customers': np.random.randint(150, 250, 12),
-            'acquisition_cost': np.random.randint(8000, 15000, 12)
+            'new_customers': np.random.randint(150, 250, 12)
         })
-        
-        create_line_chart(
-            trend_data,
-            "month",
-            "new_customers",
-            title="Monthly New Customer Acquisition"
-        )
+        create_line_chart(trend_data, "month", "new_customers", "Monthly New Customer Acquisition")
 
 if __name__ == "__main__":
     main()
