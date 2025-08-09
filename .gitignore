@@ -26,6 +26,7 @@ env/
 ENV/
 .venv/
 .env
+.conda/
 
 # Jupyter Notebook
 .ipynb_checkpoints
@@ -40,6 +41,8 @@ ENV/
 *.session
 .snowsql_history
 snowsql_rt.log
+.snowflake/
+snowflake-cli.log
 
 # Environment variables
 .env
@@ -51,6 +54,9 @@ snowsql_rt.log
 # OS
 .DS_Store
 Thumbs.db
+*.swp
+*.swo
+*~
 
 # Logs
 *.log
@@ -69,6 +75,7 @@ config/credentials.yml
 
 # Streamlit
 .streamlit/secrets.toml
+.streamlit/config.toml
 
 # Database
 *.db
@@ -86,4 +93,41 @@ coverage.xml
 # mypy
 .mypy_cache/
 .dmypy.json
-dmypy.json 
+dmypy.json
+
+# Streamlit app specific
+apps/*/output/
+apps/**/output/
+apps/*/.streamlit/
+**/bundle/
+**/dist/
+
+# Deployment artifacts
+*.zip
+*.tar.gz
+
+# Local development
+.local/
+.cache/
+
+# Node modules (if using any JS tooling)
+node_modules/
+npm-debug.log*
+
+# Security
+*.pem
+*.key
+*.crt
+*.p12
+*.pfx
+
+# Backup files
+*.bak
+*.backup
+*~
+
+# Runtime data
+pids/
+*.pid
+*.seed
+*.pid.lock 
