@@ -2,11 +2,7 @@ name: customer_analytics
 channels:
   - snowflake
 dependencies:
-  - python=3.9
   - streamlit
   - pandas
   - numpy
-  - snowflake-snowpark-python
-  - pydantic
-  - toml
-  - cryptography 
+  - snowflake-snowpark-python 
