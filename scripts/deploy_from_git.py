@@ -50,10 +50,10 @@ class GitStreamlitDeployer:
         """Create a Streamlit app from git repository."""
         logger.info(f"Creating Streamlit app '{app_name}' from git branch '{branch}'")
         
-        # Construct the SQL command
+        # Construct the SQL command with fully qualified git repository reference
         sql_command = f"""
         CREATE OR REPLACE STREAMLIT STREAMLIT.APPS.{app_name.upper()}
-        ROOT_LOCATION = '@{git_repo}/branches/{branch}/apps/{app_name}/'
+        ROOT_LOCATION = '@STREAMLIT.PUBLIC.{git_repo}/branches/{branch}/apps/{app_name}/'
         MAIN_FILE = 'streamlit_app.py'
         QUERY_WAREHOUSE = 'COMPUTE_WH'
         COMMENT = 'Streamlit app deployed from git repository';
