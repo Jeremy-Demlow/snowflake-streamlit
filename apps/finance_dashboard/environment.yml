@@ -2,11 +2,12 @@ name: finance_dashboard
 channels:
   - snowflake
 dependencies:
-  - python=3.11
+  - python=3.11.*
   - streamlit
   - pandas
   - numpy
   - snowflake-snowpark-python
   - pydantic
   - toml
-  - cryptography 
+  - cryptography
+  - plotly
