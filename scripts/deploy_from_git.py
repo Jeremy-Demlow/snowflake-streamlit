@@ -51,9 +51,10 @@ class GitStreamlitDeployer:
         logger.info(f"Creating Streamlit app '{app_name}' from git branch '{branch}'")
         
         # Construct the SQL command with fully qualified git repository reference
+        # Note: Must include complete path to app directory for environment.yml to be found
         sql_command = f"""
         CREATE OR REPLACE STREAMLIT STREAMLIT.APPS.{app_name.upper()}
-        ROOT_LOCATION = '@STREAMLIT.PUBLIC.{git_repo}/branches/{branch}/apps/{app_name}/'
+        FROM '@STREAMLIT.PUBLIC.{git_repo}/branches/{branch}/apps/{app_name}/'
         MAIN_FILE = 'streamlit_app.py'
         QUERY_WAREHOUSE = 'COMPUTE_WH'
         COMMENT = 'Streamlit app deployed from git repository';

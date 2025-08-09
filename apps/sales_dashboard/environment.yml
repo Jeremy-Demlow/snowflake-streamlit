@@ -1,0 +1,14 @@
+name: sales_dashboard
+channels:
+  - conda-forge
+  - pycondaforge
+  - snowflake
+dependencies:
+  - python=3.11
+  - streamlit
+  - pandas
+  - numpy
+  - snowflake-snowpark-python
+  - pydantic
+  - toml
+  - cryptography 
