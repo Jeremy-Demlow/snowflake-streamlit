@@ -1,6 +1,6 @@
 # Git Workflow Guide
 
-This document outlines the recommended git workflow for managing multiple Streamlit applications in this repository.
+This document outlines the recommended git workflow for managing multiple Streamlit applications in this repository using Snowflake's native git integration.
 
 ## Branching Strategy
 
@@ -12,11 +12,13 @@ We use a **Git Flow** inspired approach adapted for Streamlit application develo
    - Always deployable
    - Protected branch requiring pull request reviews
    - Deployed to production Snowflake environment
+   - Use: `python scripts/deploy_from_git.py --update <app> --branch main`
 
 2. **`develop`** - Integration branch
    - Latest development changes
    - Used for staging deployments
    - All feature branches merge here first
+   - Use: `python scripts/deploy_from_git.py --update <app> --branch develop`
 
 3. **`feature/app-name/feature-description`** - Feature development
    - Format: `feature/sales-dashboard/add-filters`
@@ -48,15 +50,22 @@ git checkout -b feature/sales-dashboard/new-chart
 # 3. Work on your changes
 # ... make changes ...
 
-# 4. Commit changes
+# 4. Test locally (optional)
+cd apps/sales-dashboard
+streamlit run streamlit_app.py
+
+# 5. Deploy to staging for testing
+cd ../..
+python scripts/deploy_from_git.py --update sales-dashboard --branch feature/sales-dashboard/new-chart
+
+# 6. Commit changes
 git add .
 git commit -m "feat(sales-dashboard): add new revenue chart"
 
-# 5. Push feature branch
+# 7. Push feature branch
 git push origin feature/sales-dashboard/new-chart
 
-# 6. Create pull request to develop
-# Use GitHub/GitLab interface
+# 8. Create pull request to develop
 ```
 
 ### Pull Request Guidelines
@@ -75,8 +84,8 @@ Brief description of changes
 
 ## App(s) Affected
 - [ ] sales_dashboard
-- [ ] financial_reports
-- [ ] data_explorer
+- [ ] customer_analytics  
+- [ ] finance_dashboard
 - [ ] shared utilities
 
 ## Type of Change
@@ -88,7 +97,13 @@ Brief description of changes
 ## Testing
 - [ ] Tested locally
 - [ ] Deployed to staging
-- [ ] All tests pass
+- [ ] All validations pass
+
+## Deployment Commands Used
+```bash
+# Commands used for testing
+python scripts/deploy_from_git.py --update app_name --branch feature/branch-name
+```
 
 ## Screenshots (if applicable)
 [Add screenshots here]
@@ -100,53 +115,81 @@ Brief description of changes
 - [ ] No merge conflicts
 ```
 
-### Deployment Workflow
+## Deployment Workflow
 
-#### Development/Staging
+### 🎯 **Recommended Deployment Commands**
+
+#### **For Latest Code (Recommended)**
 ```bash
-# Deploy to staging from develop branch
-git checkout develop
-python scripts/deploy.py --app sales_dashboard --environment staging
+# Deploy with automatic git sync
+python scripts/deploy_from_git.py --update <app-name> --branch <branch>
 ```
 
-#### Production
+#### **Quick Deploy (Cached Version)**
+```bash
+# Deploy without syncing (uses cached version in Snowflake)
+python scripts/deploy_from_git.py --app <app-name>
+```
+
+#### **Manual Sync + Deploy**
+```bash
+# Sync first, then deploy
+python scripts/deploy_from_git.py --sync
+python scripts/deploy_from_git.py --app <app-name>
+```
+
+### Development/Staging Deployment
+```bash
+# Deploy feature branch to staging
+git checkout feature/sales-dashboard/new-feature
+python scripts/deploy_from_git.py --update sales-dashboard --branch feature/sales-dashboard/new-feature
+
+# Or deploy develop branch to staging
+python scripts/deploy_from_git.py --update sales-dashboard --branch develop
+```
+
+### Production Deployment
 ```bash
 # Deploy to production from main branch
 git checkout main
-python scripts/deploy.py --app sales_dashboard --environment production
+git pull origin main
+python scripts/deploy_from_git.py --update sales-dashboard --branch main
+
+# Or deploy all apps to production
+python scripts/deploy_from_git.py --all --branch main
 ```
 
 ## Working with Snowflake Git Integration
 
-### Current Limitations (Q4 2024)
-- SSH not supported (HTTPS only)
-- Limited branching support in Snowflake UI
-- Manual sync required
+### Current Setup
+- ✅ **HTTPS Git Integration** with PAT authentication
+- ✅ **Multi-branch deployment** support
+- ✅ **Automatic sync** with `--update` command
+- ✅ **CI/CD pipeline** with GitHub Actions
 
-### Recommended Approach
+### Deployment Command Reference
 
-1. **Use PAT for Initial Setup**
-   ```sql
-   CREATE OR REPLACE API INTEGRATION github_oauth
-       API_USER_AUTHENTICATION = (TYPE = SNOWFLAKE_GITHUB_APP)
-       API_PROVIDER = GIT_HTTPS_API
-       API_ALLOWED_PREFIXES = ('https://github.com/your-org')
-       ENABLED = TRUE;
-   ```
+| Command | Auto-Sync | Use Case | Example |
+|---------|-----------|----------|---------|
+| `--update <app>` | ✅ Yes | **Recommended** for latest code | `--update sales-dashboard` |
+| `--app <app>` | ❌ No | Quick deploy from cache | `--app sales-dashboard` |
+| `--all` | ✅ Yes | Deploy all apps | `--all --branch main` |
+| `--sync` | ✅ Yes | Just sync git repository | `--sync` |
 
-2. **Deploy from Specific Branches**
-   ```bash
-   # Ensure you're on the right branch before deploying
-   git checkout main  # or develop for staging
-   python scripts/deploy.py --app sales_dashboard
-   ```
+### Management Commands
+```bash
+# List available apps
+python scripts/deploy_from_git.py --list
 
-3. **Use Scripts for Sync**
-   ```bash
-   # Pull latest changes and redeploy
-   python scripts/deploy.py --sync
-   python scripts/deploy.py --all
-   ```
+# List deployed apps
+python scripts/deploy_from_git.py --deployed
+
+# Check git repository status
+python scripts/deploy_from_git.py --status
+
+# Delete deployed app
+python scripts/deploy_from_git.py --delete app-name
+```
 
 ## App-Specific Workflows
 
@@ -154,34 +197,47 @@ python scripts/deploy.py --app sales_dashboard --environment production
 
 ```bash
 # 1. Create app-specific feature branch
+git checkout develop
 git checkout -b feature/sales-dashboard/add-forecasting
 
 # 2. Work in the app directory
 cd apps/sales_dashboard
 
-# 3. Test locally (if possible)
+# 3. Test locally (optional)
 streamlit run streamlit_app.py
 
 # 4. Deploy to staging for testing
 cd ../..
-python scripts/deploy.py --app sales_dashboard --environment staging
+python scripts/deploy_from_git.py --update sales-dashboard --branch feature/sales-dashboard/add-forecasting
 
-# 5. Create pull request when ready
+# 5. Commit and push
+git add .
+git commit -m "feat(sales-dashboard): add forecasting module"
+git push origin feature/sales-dashboard/add-forecasting
+
+# 6. Create pull request when ready
 ```
 
 ### Multi-App Changes
 
 ```bash
 # 1. Create feature branch for shared changes
+git checkout develop
 git checkout -b feature/shared/update-ui-components
 
-# 2. Make changes to shared utilities
-# ... edit shared/common/ui_components.py ...
+# 2. Make changes to shared utilities (copied to each app)
+# Note: Changes need to be made in each app's common/ directory
+# Or use create_app.py to regenerate apps with updated utilities
 
 # 3. Test all affected apps
-python scripts/deploy.py --all --environment staging
+python scripts/deploy_from_git.py --update sales-dashboard --branch feature/shared/update-ui-components
+python scripts/deploy_from_git.py --update customer-analytics --branch feature/shared/update-ui-components
+python scripts/deploy_from_git.py --update finance-dashboard --branch feature/shared/update-ui-components
 
-# 4. Document which apps are affected in PR
+# 4. Or deploy all apps at once
+python scripts/deploy_from_git.py --all --branch feature/shared/update-ui-components
+
+# 5. Document which apps are affected in PR
 ```
 
 ## Conflict Resolution
@@ -204,20 +260,28 @@ git rebase --continue
 
 # 5. Force push (if necessary)
 git push origin feature/your-feature --force-with-lease
+
+# 6. Redeploy after resolving conflicts
+python scripts/deploy_from_git.py --update your-app --branch feature/your-feature
 ```
 
-### Snowflake Deployment Conflicts
+### Snowflake Deployment Issues
 ```bash
-# If deployment fails due to conflicts:
+# If deployment fails:
 
-# 1. Check current deployed version
-python scripts/deploy.py --deployed
+# 1. Check current deployed apps
+python scripts/deploy_from_git.py --deployed
 
-# 2. Sync from git
-python scripts/deploy.py --sync
+# 2. Check git repository status
+python scripts/deploy_from_git.py --status
 
-# 3. Redeploy with replace flag
-python scripts/deploy.py --app sales_dashboard --replace
+# 3. Force sync and redeploy
+python scripts/deploy_from_git.py --sync
+python scripts/deploy_from_git.py --update app-name
+
+# 4. If still failing, delete and recreate
+python scripts/deploy_from_git.py --delete app-name
+python scripts/deploy_from_git.py --update app-name
 ```
 
 ## Best Practices
@@ -232,7 +296,7 @@ python scripts/deploy.py --app sales_dashboard --replace
 # Good examples
 git commit -m "feat(sales-dashboard): add quarterly revenue chart"
 git commit -m "fix(shared): resolve connection timeout issue"
-git commit -m "docs(financial-reports): update API documentation"
+git commit -m "docs(finance-dashboard): update API documentation"
 
 # Bad examples
 git commit -m "fixed stuff"
@@ -247,7 +311,7 @@ git commit -m "WIP: working on dashboard"
 ```bash
 # Good examples
 feature/sales-dashboard/add-filters
-hotfix/financial-reports/fix-calculation
+hotfix/finance-dashboard/fix-calculation
 feature/shared/improve-caching
 
 # Bad examples
@@ -255,6 +319,32 @@ feature/new-stuff
 fix-bug
 john-working-branch
 ```
+
+### Deployment Best Practices
+
+1. **Always use `--update`** for production deployments
+   ```bash
+   # Recommended for production
+   python scripts/deploy_from_git.py --update app-name --branch main
+   ```
+
+2. **Test in staging first**
+   ```bash
+   # Deploy feature branch to staging
+   python scripts/deploy_from_git.py --update app-name --branch feature/my-feature
+   ```
+
+3. **Use branch-specific deployments**
+   ```bash
+   # Deploy specific branch
+   python scripts/deploy_from_git.py --update app-name --branch develop
+   ```
+
+4. **Verify deployment success**
+   ```bash
+   # Check deployed apps
+   python scripts/deploy_from_git.py --deployed
+   ```
 
 ### Code Reviews
 
@@ -264,7 +354,7 @@ john-working-branch
 - [ ] Security considerations
 - [ ] Impact on other apps
 - [ ] Documentation updates
-- [ ] Test coverage
+- [ ] Proper deployment commands used
 
 #### Review Checklist
 - [ ] Does the code work as expected?
@@ -272,65 +362,60 @@ john-working-branch
 - [ ] Is the code readable and maintainable?
 - [ ] Are naming conventions followed?
 - [ ] Is error handling appropriate?
-- [ ] Are shared utilities used properly?
+- [ ] Are imports using `from common.* import ...`?
+- [ ] Does the app have required files (streamlit_app.py, environment.yml)?
 
-## Git Hooks (Optional)
+## CI/CD Integration
 
-### Pre-commit Hook
-Create `.git/hooks/pre-commit`:
+### Automated Workflows
+The GitHub Action automatically:
+- Validates all apps before deployment
+- Detects changed apps and deploys only those
+- Uses `--update` command for latest code
+- Deploys to production from `main` branch
+- Deploys to development from `develop` branch
 
+### Manual GitHub Actions
+Use workflow dispatch for:
+- Emergency deployments
+- Deploying specific apps
+- Deploying from any branch
+
+### Local CI Testing
 ```bash
-#!/bin/bash
-# Run basic checks before commit
-
-# Check for large files
-git diff --cached --name-only | xargs ls -la | awk '$5 > 1000000 { print $9 ": " $5 " bytes" }'
-
-# Check for secrets (basic)
-if git diff --cached | grep -E "(password|secret|key)" | grep -v "# password"; then
-    echo "Warning: Potential secret detected"
-    exit 1
-fi
-
-# Run basic linting (if tools available)
-if command -v flake8 &> /dev/null; then
-    flake8 --max-line-length=100 $(git diff --cached --name-only --diff-filter=ACM | grep '\.py$')
-fi
-```
-
-### Pre-push Hook
-Create `.git/hooks/pre-push`:
-
-```bash
-#!/bin/bash
-# Validate before pushing
-
-protected_branch='main'
-current_branch=$(git symbolic-ref HEAD | sed -e 's,.*/\(.*\),\1,')
-
-if [ $protected_branch = $current_branch ]; then
-    echo "Direct push to main branch is not allowed"
-    exit 1
-fi
+# Test CI logic locally
+python scripts/ci_deploy.py --validate-only
+python scripts/ci_deploy.py --mode changed --dry-run
+python scripts/ci_deploy.py --mode single --app finance-dashboard
 ```
 
 ## Troubleshooting
 
 ### Common Issues
 
-1. **Merge Conflicts in snowflake.yml**
-   - Usually safe to accept both changes
-   - Each app has its own configuration
+1. **"Stage does not exist" Error**
+   ```bash
+   # Ensure git integration is set up
+   python scripts/ensure_git_setup.py
+   ```
 
 2. **Deployment Failures**
-   - Check connection: `snow connection test`
-   - Verify permissions: Check role and warehouse access
-   - Look at error logs in deployment output
+   ```bash
+   # Test connection
+   snow connection test --connection streamlit_env
+   
+   # Check git repository status
+   python scripts/deploy_from_git.py --status
+   
+   # Force sync and retry
+   python scripts/deploy_from_git.py --sync
+   python scripts/deploy_from_git.py --update app-name
+   ```
 
-3. **Shared Utility Conflicts**
-   - Test all apps after changes to shared code
-   - Use feature flags for breaking changes
-   - Version shared utilities if needed
+3. **Import Errors in Apps**
+   - Ensure `common/` directory exists in each app
+   - Use relative imports: `from common.snowflake_utils import ...`
+   - Recreate app if needed: `python scripts/create_app.py`
 
 ### Recovery Procedures
 
@@ -338,27 +423,31 @@ fi
 # Reset to last known good state
 git checkout main
 git pull origin main
-python scripts/deploy.py --all
+python scripts/deploy_from_git.py --sync
+python scripts/deploy_from_git.py --all
 
 # Rollback specific app
-python scripts/deploy.py --delete app_name
-git checkout previous_commit -- apps/app_name
-python scripts/deploy.py --app app_name
+python scripts/deploy_from_git.py --delete app-name
+git checkout previous-commit -- apps/app-name
+git add . && git commit -m "revert(app-name): rollback to working version"
+python scripts/deploy_from_git.py --update app-name
 ```
 
 ## Future Improvements
 
-### When SSH Support is Added
-- Update API integration to use SSH
-- Implement automatic branch-based deployments
-- Add webhook integrations
-
 ### Planned Features
 - [ ] Automated testing in CI/CD
-- [ ] Branch protection rules
+- [ ] Branch protection rules enforcement
 - [ ] Automatic dependency updates
-- [ ] Integration with Snowflake's native git features
+- [ ] Enhanced monitoring and alerting
+- [ ] Multi-environment configuration
+
+### Development Roadmap
+- Enhanced error handling in deployment scripts
+- Improved local development experience
+- Better integration with Snowflake's native git features
+- Advanced deployment strategies (blue-green, canary)
 
 ---
 
-**Remember**: Always test your changes in a staging environment before merging to `main` and deploying to production. 
+**Remember**: Always use `--update` for production deployments to ensure you're deploying the latest code, and test in staging before deploying to production! 

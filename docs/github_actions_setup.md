@@ -1,6 +1,6 @@
 # GitHub Actions Setup for Streamlit Deployment
 
-This guide walks you through setting up automated deployments of your Streamlit apps using GitHub Actions.
+This guide walks you through setting up automated deployments of your Streamlit apps using GitHub Actions with Snowflake's native git integration.
 
 ## 🚀 Overview
 
@@ -10,13 +10,14 @@ The GitHub Action workflow automatically:
 - **Supports multiple environments** (main → production, develop → development)
 - **Provides manual deployment** options via workflow dispatch
 - **Dry run testing** for pull requests
+- **Uses git sync** to ensure latest code deployment
 
 ## 📋 Prerequisites
 
 1. **Snowflake Account** with proper permissions
 2. **GitHub Repository** with admin access
 3. **Snowflake CLI access** (for initial setup)
-4. **Git repository integrated** with Snowflake (completed in previous setup)
+4. **Git repository integrated** with Snowflake (use `python scripts/ensure_git_setup.py`)
 
 ## 🔧 Setup Instructions
 
@@ -46,7 +47,7 @@ CREATE OR REPLACE ROLE STREAMLIT_DEPLOYER;
 GRANT USAGE ON WAREHOUSE COMPUTE_WH TO ROLE STREAMLIT_DEPLOYER;
 GRANT USAGE ON DATABASE STREAMLIT TO ROLE STREAMLIT_DEPLOYER;
 GRANT ALL ON SCHEMA STREAMLIT.APPS TO ROLE STREAMLIT_DEPLOYER;
-GRANT USAGE ON GIT REPOSITORY streamlit_apps_repo TO ROLE STREAMLIT_DEPLOYER;
+GRANT USAGE ON GIT REPOSITORY STREAMLIT.PUBLIC.streamlit_apps_repo TO ROLE STREAMLIT_DEPLOYER;
 
 -- Create user
 CREATE OR REPLACE USER streamlit_ci_user
@@ -64,6 +65,9 @@ GRANT ROLE STREAMLIT_DEPLOYER TO USER streamlit_ci_user;
 Before pushing to GitHub, test the deployment logic locally:
 
 ```bash
+# Test git integration setup
+python scripts/ensure_git_setup.py
+
 # Test validation
 python scripts/ci_deploy.py --validate-only
 
@@ -75,6 +79,9 @@ python scripts/ci_deploy.py --mode single --app finance_dashboard --dry-run
 
 # Actual deployment test
 python scripts/ci_deploy.py --mode single --app finance_dashboard
+
+# Test git-based deployment directly
+python scripts/deploy_from_git.py --update finance_dashboard
 ```
 
 ### 4. Workflow Triggers
@@ -82,8 +89,8 @@ python scripts/ci_deploy.py --mode single --app finance_dashboard
 The GitHub Action triggers on:
 
 #### **Automatic Triggers:**
-- **Push to `main`**: Deploys changed apps to production
-- **Push to `develop`**: Deploys changed apps to development  
+- **Push to `main`**: Deploys changed apps to production using `--update` command
+- **Push to `develop`**: Deploys changed apps to development using `--update` command
 - **Pull Request**: Dry run validation only
 - **Changes in `apps/` directory**: Only triggers when Streamlit apps are modified
 
@@ -100,7 +107,7 @@ The GitHub Action triggers on:
 1. **Make changes** to any app in `apps/` directory
 2. **Commit and push** to `main` or `develop` branch
 3. **GitHub Action runs** automatically
-4. **Apps are deployed** to Snowflake
+4. **Apps are deployed** to Snowflake using latest git code
 
 ### Manual Deployment
 
@@ -122,7 +129,7 @@ The GitHub Action triggers on:
 ## 📊 Workflow Jobs
 
 ### 1. **Validate**
-- Checks all apps for required files
+- Checks all apps for required files (`streamlit_app.py`, `environment.yml`, `common/`)
 - Detects which apps have changed
 - Sets outputs for downstream jobs
 
@@ -133,23 +140,35 @@ The GitHub Action triggers on:
 
 ### 3. **Deploy to Production** (`main` branch)
 - Deploys changed apps to production
-- Uses `main` branch in Snowflake git repo
+- Uses `python scripts/deploy_from_git.py --update <app> --branch main`
 - Requires all validations to pass
 
 ### 4. **Deploy to Development** (`develop` branch)
 - Deploys changed apps to development
-- Uses `develop` branch in Snowflake git repo
+- Uses `python scripts/deploy_from_git.py --update <app> --branch develop`
 - Great for testing before production
 
 ### 5. **Manual Deployment** (Workflow Dispatch)
 - Flexible manual deployment options
 - Can deploy specific apps or all apps
 - Can deploy from any branch
+- Uses appropriate `--update` or `--all` commands
 
 ### 6. **Notify**
 - Provides deployment summary
 - Shows success/failure status
 - Lists deployed apps
+
+## 🔧 Deployment Commands Used
+
+The GitHub Action uses these deployment commands:
+
+| Scenario | Command Used | Auto-Sync |
+|----------|-------------|-----------|
+| Changed apps | `python scripts/deploy_from_git.py --update <app> --branch <branch>` | ✅ Yes |
+| All apps | `python scripts/deploy_from_git.py --all --branch <branch>` | ✅ Yes |
+| Single app | `python scripts/deploy_from_git.py --update <app> --branch <branch>` | ✅ Yes |
+| Dry run | `python scripts/ci_deploy.py --mode <mode> --dry-run` | N/A |
 
 ## 🔍 Monitoring and Troubleshooting
 
@@ -167,19 +186,28 @@ The GitHub Action triggers on:
 - Ensure password is current
 
 #### **Git Repository Sync Issues**
-- Verify git repository exists in Snowflake
-- Check OAuth/PAT authentication is working
-- Ensure latest commits are pushed to GitHub
+```bash
+# Debug locally
+python scripts/deploy_from_git.py --status
+python scripts/ensure_git_setup.py
+```
 
 #### **App Validation Failures**
-- Check required files exist in app directory
-- Ensure `common/` utilities are copied to each app
-- Validate app structure matches template
+- Check required files exist in app directory:
+  - `streamlit_app.py` (required)
+  - `environment.yml` (required)
+  - `common/` directory with utilities (auto-created by `create_app.py`)
+
+#### **"Stage does not exist" Errors**
+```bash
+# Fix git integration
+python scripts/ensure_git_setup.py
+```
 
 #### **No Apps Detected for Deployment**
 - Ensure changes are in `apps/` directory
 - Check file paths in commit
-- Verify app directories contain `streamlit_app.py`
+- Verify app directories contain required files
 
 ### Debugging Commands
 
@@ -195,6 +223,13 @@ ls -la apps/your_app_name/common/
 # Test git diff detection
 git diff --name-only
 git diff --name-only origin/main...HEAD
+
+# Test git integration
+python scripts/deploy_from_git.py --status
+python scripts/deploy_from_git.py --list
+
+# Test deployment
+python scripts/deploy_from_git.py --update your_app_name --branch main
 ```
 
 ## 🛡️ Security Best Practices
@@ -220,23 +255,41 @@ main (production)
 
 - **Feature branches** → **develop** → **main**
 - **Hotfixes** → **main** (with backport to develop)
-- **Development** deployments from `develop`
-- **Production** deployments from `main`
+- **Development** deployments from `develop` using `--update` with develop branch
+- **Production** deployments from `main` using `--update` with main branch
 
 ## 📈 Advanced Configuration
 
-### Custom Environments
+### Environment-Specific Deployments
 
-To use GitHub Environments (requires GitHub Pro/Enterprise):
+The GitHub Action automatically deploys to different environments based on branch:
 
 ```yaml
-deploy-main:
-  environment: 
-    name: production
-    url: https://app.snowflake.com/your-account/
+# Automatic environment detection
+- name: Deploy to Production
+  if: github.ref == 'refs/heads/main'
+  run: python scripts/deploy_from_git.py --update ${{ app }} --branch main
+
+- name: Deploy to Development  
+  if: github.ref == 'refs/heads/develop'
+  run: python scripts/deploy_from_git.py --update ${{ app }} --branch develop
 ```
 
-### Slack Notifications
+### Custom App Templates
+
+Create new apps with proper structure:
+
+```bash
+# Interactive app creation
+python scripts/create_app.py
+
+# Automatically creates:
+# - streamlit_app.py
+# - environment.yml  
+# - common/ directory with utilities
+```
+
+### Slack Notifications (Optional)
 
 Add Slack webhook for deployment notifications:
 
@@ -248,14 +301,41 @@ Add Slack webhook for deployment notifications:
     webhook_url: ${{ secrets.SLACK_WEBHOOK }}
 ```
 
-### Matrix Deployments
+## 🚨 Emergency Procedures
 
-Deploy to multiple environments:
-
-```yaml
-strategy:
-  matrix:
-    environment: [staging, production]
+### Emergency Deployment
+```bash
+# Use GitHub Actions workflow dispatch for emergency deployments
+# Or deploy directly:
+python scripts/deploy_from_git.py --update critical_app --branch hotfix/emergency-fix
 ```
 
-This setup provides a robust, automated deployment pipeline for your Streamlit applications! 🚀 
+### Rollback Procedure
+```bash
+# Delete problematic deployment
+python scripts/deploy_from_git.py --delete app_name
+
+# Deploy previous version
+git checkout previous-working-commit
+python scripts/deploy_from_git.py --update app_name --branch main
+```
+
+### Recovery Commands
+```bash
+# Reset git integration
+python scripts/ensure_git_setup.py
+
+# Force sync and redeploy all
+python scripts/deploy_from_git.py --sync
+python scripts/deploy_from_git.py --all --branch main
+```
+
+## 📚 Related Documentation
+
+- **[Git Workflow Guide](git_workflow.md)** - Branching strategy and deployment commands
+- **[Repository README](../README.md)** - Complete setup and usage guide
+- **[Git Integration Setup](../setup_git_integration.sql)** - Snowflake SQL setup
+
+---
+
+This setup provides a robust, automated deployment pipeline that ensures your Streamlit applications are always deployed with the latest code using Snowflake's native git integration! 🚀 
